@@ -10,7 +10,7 @@ interface DanmakuItem extends Danmaku {
 
 const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff8fab', '#c084fc', '#fb923c']
 
-export default function DanmakuOverlay() {
+export default function DanmakuOverlay({ mode }: { mode?: string }) {
   const [danmakuList, setDanmakuList] = useState<DanmakuItem[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const nextY = useRef(0)
@@ -36,8 +36,10 @@ export default function DanmakuOverlay() {
     return () => { socket.off('danmaku:new', handler) }
   }, [])
 
+  const isQuizMode = mode && mode !== 'waiting' && mode !== 'settlement'
+
   return (
-    <div className="danmaku-overlay" ref={containerRef}>
+    <div className={`danmaku-overlay ${isQuizMode ? 'quiz-mode' : ''}`} ref={containerRef}>
       {danmakuList.map(d => (
         <div
           key={d.id}

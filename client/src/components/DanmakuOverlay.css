@@ -10,6 +10,18 @@
   mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
 }
+.danmaku-overlay.quiz-mode {
+  height: 18vh;
+  mask-image: linear-gradient(to bottom, transparent 0%, black 30%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 30%, black 100%);
+}
+.danmaku-overlay.quiz-mode .danmaku-item {
+  font-size: 16px;
+  line-height: 28px;
+}
+.danmaku-overlay.quiz-mode .danmaku-text {
+  font-size: 16px;
+}
 
 .danmaku-item {
   position: absolute;

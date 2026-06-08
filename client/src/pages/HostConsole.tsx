@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSocket } from '../socket'
-import type { GameStateData, Team, Prize } from '../types'
+import type { GameStateData, Team, Prize, Question } from '../types'
 import './HostConsole.css'
 
 const PRIZES: Prize[] = [
@@ -28,6 +28,7 @@ export default function HostConsole() {
   const [selectedVideo, setSelectedVideo] = useState('')
   const [selectedPrizeId, setSelectedPrizeId] = useState(PRIZES[0].id)
   const [winnerCount, setWinnerCount] = useState(1)
+  const [questions, setQuestions] = useState<Question[]>([])
 
   useEffect(() => {
     const socket = getSocket()
@@ -40,6 +41,10 @@ export default function HostConsole() {
       setErrorMsg(msg)
       setTimeout(() => setErrorMsg(null), 3000)
     })
+
+    // Load questions
+    socket.on('questions', (qs: Question[]) => setQuestions(qs))
+    socket.emit('host:get-questions')
 
     // Probe video files
     fetch('/media/videos/')
@@ -56,7 +61,7 @@ export default function HostConsole() {
       })
       .catch(() => {})
 
-    return () => { socket.off('game:state'); socket.off('host:error') }
+    return () => { socket.off('game:state'); socket.off('host:error'); socket.off('questions') }
   }, [])
 
   function emit(event: string, data?: any) {
@@ -90,6 +95,11 @@ export default function HostConsole() {
       <header className="host-header">
         <h1>🎮 主持人控制台</h1>
         <div className="host-mode-bar">
+          {state && state.totalRounds > 0 && (
+            <span className="round-indicator">
+              🔄 第 {state.currentRound}/{state.totalRounds} 轮
+            </span>
+          )}
           <span>模式: <strong>{modeLabel(state?.mode || 'waiting')}</strong></span>
           {lastAction && <span className="last-action">↪ {lastAction}</span>}
         </div>
@@ -114,6 +124,12 @@ export default function HostConsole() {
               <button className="hbtn gold" onClick={() => emit('host:set-mode', 'settlement')}>
                 🏆 结算
               </button>
+              {state && state.currentRound < state.totalRounds && (
+                <button className="hbtn" style={{ background: '#f59e0b', color: 'white' }}
+                  onClick={() => emit('host:next-round')}>
+                  ➡️ 下一轮 (第{state.currentRound + 1}轮)
+                </button>
+              )}
               <button className="hbtn outline" onClick={() => emit('host:set-mode', 'waiting')}>
                 🔄 重置
               </button>
@@ -128,8 +144,8 @@ export default function HostConsole() {
             <h2>🔔 抢答器命中</h2>
             <p className="card-hint">在物理抢答器显示命中号码后，在此选择并按确认</p>
             <div className="buzzer-grid">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
-                const team = state?.teams.find(t => t.buzzerNumber === n)
+              {Array.from({ length: 8 }, (_, i) => i + 1).map(n => {
+                const team = state?.teams.find(t => t.buzzerNumber === n && t.round === state?.currentRound)
                 return (
                   <button
                     key={n}
@@ -175,7 +191,7 @@ export default function HostConsole() {
           {/* Manual score adjust */}
           <section className="host-card">
             <h2>✏️ 手动调分</h2>
-            {state?.teams.filter(t => t.score > 0 || true).map(t => (
+            {state?.teams.filter(t => t.round === state.currentRound || t.score > 0).map(t => (
               <div key={t.id} className="score-adjust-row">
                 <span className="adjust-team" style={{ color: t.color }}>{t.name}</span>
                 <span className="adjust-current">{t.score}分</span>
@@ -191,15 +207,24 @@ export default function HostConsole() {
         <div className="host-column">
           {/* Teams */}
           <section className="host-card">
-            <h2>👥 队伍管理</h2>
-            <div className="team-list">
-              {state?.teams.map(t => (
-                <div key={t.id} className="team-row">
+            <h2>👥 积分榜（全部队伍）</h2>
+            <div className="team-list-all">
+              {[...(state?.teams || [])]
+                .filter(t => t.score > 0 || t.round > 0)
+                .sort((a, b) => b.score - a.score)
+                .map(t => (
+                <div key={t.id} className={`team-row ${t.round === state?.currentRound ? 'current-round' : ''}`}>
                   <div className="team-badge" style={{ backgroundColor: t.color }}>
-                    #{t.buzzerNumber}
+                    #{t.buzzerNumber || '—'}
                   </div>
-                  {editingTeam === t.id ? (
-                    <div className="team-edit">
+                  {t.round > 0 && <span className="team-round-tag">R{t.round}</span>}
+                  <span className="team-name">{t.name}</span>
+                  <span className="team-score" style={{ color: t.color }}>{t.score}</span>
+                  <button className="hbtn-small outline" onClick={() => {
+                    setEditingTeam(t.id); setEditName(t.name); setEditScore(String(t.score))
+                  }}>✏️</button>
+                  {editingTeam === t.id && (
+                    <div className="team-edit" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 10, background: '#161b22', padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }}>
                       <input value={editName} onChange={e => setEditName(e.target.value)}
                         className="tiny-input" placeholder="队名" />
                       <input value={editScore} onChange={e => setEditScore(e.target.value)}
@@ -210,14 +235,6 @@ export default function HostConsole() {
                         setEditingTeam(null)
                       }}>✓</button>
                     </div>
-                  ) : (
-                    <>
-                      <span className="team-name">{t.name}</span>
-                      <span className="team-score" style={{ color: t.color }}>{t.score}</span>
-                      <button className="hbtn-small outline" onClick={() => {
-                        setEditingTeam(t.id); setEditName(t.name); setEditScore(String(t.score))
-                      }}>✏️</button>
-                    </>
                   )}
                 </div>
               ))}
@@ -242,19 +259,19 @@ export default function HostConsole() {
 
           {/* Questions */}
           <section className="host-card">
-            <h2>📋 题目列表</h2>
+            <h2>📋 题目列表 {questions.length > 0 && <span className="q-count">({questions.length}题)</span>}</h2>
             <div className="q-list">
-              {[
-                '人体最大的器官？', '正常成人静息心率？', '哪种维生素靠阳光合成？',
-                '白大褂初衷？', '人体最多物质？', 'WHO缩写？', '医者仁心出处？',
-                '三查七对不包括？', 'QD含义？', '非医院科室？', '手术室无菌级别？',
-                '听诊器延伸检查？', '120代表？', '生命体征不包括？', '希波克拉底誓言？',
-              ].map((q, i) => (
-                <div key={i} className={`q-item ${state?.currentQuestion?.id === i + 1 ? 'active' : ''}`}>
-                  <span className="q-num">{i + 1}</span>
-                  <span className="q-text">{q}</span>
-                </div>
-              ))}
+              {questions.length === 0 ? (
+                <p className="card-hint">暂无题目，请在管理页面导入</p>
+              ) : (
+                questions.map(q => (
+                  <div key={q.id} className={`q-item ${state?.currentQuestion?.id === q.id ? 'active' : ''}`}>
+                    <span className="q-num">{q.id}</span>
+                    <span className="q-group-badge">G{q.group}</span>
+                    <span className="q-text">{q.text}</span>
+                  </div>
+                ))
+              )}
             </div>
           </section>
 

@@ -4,13 +4,16 @@ export interface Team {
   buzzerNumber: number
   score: number
   color: string
+  round: number          // 0 = not participating, 1-4 = assigned round
 }
 
 export interface Question {
   id: number
   text: string
-  image?: string
+  type: 'choice' | 'fill'
   options?: string[]
+  answer?: string
+  group: number          // 1-4, which round's question set
 }
 
 export interface Danmaku {
@@ -44,6 +47,9 @@ export interface GameStateData {
   lotteryActive: boolean
   lotteryDraw: LotteryDraw | null
   previousMode: GameMode  // to restore after lottery
+  currentRound: number    // 1-4
+  totalRounds: number     // total rounds in this session
+  questionGroup: number   // which question group to use (= currentRound typically)
 }
 
 export interface ScoreEntry {

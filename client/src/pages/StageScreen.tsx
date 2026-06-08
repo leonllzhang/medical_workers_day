@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { getSocket } from '../socket'
 import DanmakuOverlay from '../components/DanmakuOverlay'
 import { QRCodeCanvas } from 'qrcode.react'
-import type { GameStateData, Team } from '../types'
+import type { GameStateData, Team, Question } from '../types'
 import './StageScreen.css'
 
 const MOBILE_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}/mobile`
@@ -80,13 +80,6 @@ function playBuzzedSound() {
       osc.stop(ctx.currentTime + i * 0.08 + 0.15)
     }
   } catch {}
-}
-
-const TEAM_COLORS: Record<string, string> = {
-  '内科': '#4d96ff', '外科': '#ff6b6b', '儿科': '#6bcb77',
-  '妇产科': '#ff8fab', '急诊科': '#ffd93d', '麻醉科': '#c084fc',
-  '检验科': '#fb923c', '影像科': '#34d399', '药剂科': '#f472b6',
-  '护理部': '#38bdf8',
 }
 
 export default function StageScreen() {
@@ -212,10 +205,13 @@ export default function StageScreen() {
         </div>
       )}
 
-      {/* Top bar with mode badge */}
+      {/* Mode badge only */}
       <header className="stage-header">
-        <h1 className="stage-title">🏥 <span className="gradient-text">医师节 · 智慧大比拼</span></h1>
-        <div className="stage-mode-badge">{modeLabel(state.mode)}</div>
+        <span />
+        <div className="stage-mode-badge">
+          {state.totalRounds > 0 && <span className="round-badge">第{state.currentRound}/{state.totalRounds}轮</span>}
+          {modeLabel(state.mode)}
+        </div>
       </header>
 
       {/* Main content area */}
@@ -257,8 +253,13 @@ export default function StageScreen() {
         </div>
       </main>
 
-      {/* Danmaku */}
-      <DanmakuOverlay />
+      {/* Danmaku — positioned at bottom when quiz is active */}
+      <DanmakuOverlay mode={state.mode} />
+
+      {/* Floating QR code — shown in bottom-right during quiz modes */}
+      {state.mode !== 'waiting' && state.mode !== 'settlement' && (
+        <FloatingQR />
+      )}
     </div>
   )
 }
@@ -292,14 +293,33 @@ function WaitingMode() {
   )
 }
 
-function ReadingMode({ question }: { question: { id: number; text: string; image?: string; options?: string[] } | null }) {
+function ReadingMode({ question }: { question: Question | null }) {
   if (!question) return <div className="mode-empty">请主持人选择题目</div>
+
+  if (question.type === 'fill') {
+    const parts = question.text.split('____')
+    return (
+      <div className="mode-reading fade-in">
+        <div className="reading-card">
+          <div className="reading-badge">第 {question.id} 题 · 填空题</div>
+          <h2 className="reading-text fill-text">
+            {parts.map((part, i) => (
+              <span key={i}>
+                {part}
+                {i < parts.length - 1 && <span className="fill-blank">______</span>}
+              </span>
+            ))}
+          </h2>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mode-reading fade-in">
       <div className="reading-card">
-        <div className="reading-badge">第 {question.id} 题</div>
+        <div className="reading-badge">第 {question.id} 题 · 选择题</div>
         <h2 className="reading-text">{question.text}</h2>
-        {question.image && <img src={question.image} alt="" className="reading-img" />}
         {question.options && (
           <div className="reading-options">
             {question.options.map((opt, i) => (
@@ -429,6 +449,18 @@ function SettlementMode({ teams }: { teams: Team[] }) {
 }
 
 // ===================== Helpers =====================
+
+function FloatingQR() {
+  const hostname = window.location.hostname
+  const port = window.location.port
+  const url = `${window.location.protocol}//${hostname}${port ? ':' + port : ''}/mobile`
+  return (
+    <div className="floating-qr">
+      <QRCodeCanvas value={`${window.location.protocol}//${url}`} size={80} bgColor="#ffffff" fgColor="#0a0e27" />
+      <span className="floating-qr-label">扫码发弹幕</span>
+    </div>
+  )
+}
 
 function modeLabel(mode: string): string {
   const map: Record<string, string> = {

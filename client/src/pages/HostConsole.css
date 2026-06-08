@@ -10,6 +10,11 @@
 .host-header h1 { font-size: 20px; }
 .host-mode-bar { display: flex; align-items: center; gap: 16px; font-size: 14px; color: var(--text-dim); }
 .host-mode-bar strong { color: var(--gold); }
+.round-indicator {
+  background: rgba(245,158,11,0.12); color: #f59e0b; padding: 2px 10px;
+  border-radius: 12px; font-size: 13px; font-weight: 700;
+  border: 1px solid rgba(245,158,11,0.2);
+}
 .last-action { color: var(--success); font-size: 13px; animation: fadeIn 0.2s; }
 .host-error {
   padding: 8px 16px; background: rgba(255,59,48,0.15); color: var(--danger);
@@ -105,11 +110,21 @@
 
 /* Teams */
 .team-list { display: flex; flex-direction: column; gap: 4px; }
+.team-list-all {
+  display: flex; flex-direction: column; gap: 2px; max-height: 360px; overflow-y: auto;
+}
 .team-row {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-  border-radius: 6px; font-size: 13px;
+  border-radius: 6px; font-size: 13px; position: relative;
 }
 .team-row:hover { background: rgba(255,255,255,0.03); }
+.team-row.current-round {
+  background: rgba(245,158,11,0.06); border-left: 2px solid #f59e0b;
+}
+.team-round-tag {
+  font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+  background: rgba(255,255,255,0.08); color: var(--text-dim);
+}
 .team-badge {
   width: 28px; height: 28px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
@@ -143,6 +158,11 @@
   align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0;
 }
 .q-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-group-badge {
+  font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+  background: rgba(230,126,34,0.15); color: #e67e22; flex-shrink: 0;
+}
+.q-count { font-size: 12px; color: var(--text-dim); font-weight: 400; }
 
 /* ====== Lottery Controls ====== */
 .lottery-prize-select label,

@@ -131,3 +131,78 @@
   background: rgba(255,255,255,0.04); border-radius: 4px;
 }
 .admin-empty { text-align: center; color: var(--text-dim); padding: 24px; font-size: 14px; }
+.admin-q-type {
+  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+  flex-shrink: 0; letter-spacing: 0.5px;
+}
+.admin-q-type.type-choice { background: rgba(77,150,255,0.15); color: #4d96ff; }
+.admin-q-type.type-fill { background: rgba(196,132,252,0.15); color: #c084fc; }
+.admin-q-answer { font-size: 11px; color: var(--success); font-weight: 600; flex-shrink: 0; }
+
+/* ====== Round Config ====== */
+.round-config-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px; padding: 12px 16px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px; margin-bottom: 14px;
+}
+.round-config-stats { display: flex; gap: 16px; font-size: 13px; color: var(--text-dim); }
+.round-config-stats strong { color: var(--text); }
+.round-config-stats .text-gold { color: var(--gold); }
+.round-config-actions { display: flex; gap: 8px; }
+
+/* Round groups */
+.round-groups { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.round-group-card {
+  flex: 1; min-width: 160px; background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden;
+}
+.round-group-header {
+  padding: 8px 12px; font-size: 12px; font-weight: 700; color: var(--gold);
+  background: rgba(255,215,0,0.06); border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.round-group-teams { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; }
+.round-group-team {
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+  border-left: 3px solid; border-radius: 4px; font-size: 12px;
+  background: rgba(255,255,255,0.03);
+}
+.rgt-buzzer { color: var(--text-dim); font-weight: 700; min-width: 20px; }
+.rgt-name { color: var(--text); font-weight: 600; }
+
+/* Team list with round config */
+.team-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); flex-shrink: 0; }
+.team-name-input {
+  flex: 1; background: transparent; border: none; color: var(--text);
+  font-size: 14px; font-weight: 600; padding: 2px 4px; border-radius: 4px;
+  min-width: 80px;
+}
+.team-name-input:focus { outline: none; background: rgba(255,255,255,0.06); }
+.team-admin-row.active { background: rgba(255,255,255,0.04); }
+.team-not-playing { font-size: 12px; color: var(--text-dim); font-style: italic; }
+.admin-select {
+  padding: 3px 6px; border-radius: 4px; background: rgba(255,255,255,0.06);
+  color: var(--text); border: 1px solid rgba(255,255,255,0.1); font-size: 12px;
+}
+.admin-select.sm { width: auto; min-width: 72px; }
+
+/* Import group */
+.admin-import-group-select {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; color: var(--text-dim);
+}
+
+/* Question group filter */
+.admin-q-group-filter {
+  display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.admin-q-group-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+  background: rgba(255,255,255,0.08); color: var(--text-dim); flex-shrink: 0;
+}
+.admin-q-type {
+  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+  flex-shrink: 0; letter-spacing: 0.5px;
+}
+.admin-q-type.type-choice { background: rgba(77,150,255,0.15); color: #4d96ff; }
+.admin-q-type.type-fill { background: rgba(196,132,252,0.15); color: #c084fc; }
+.admin-q-answer { font-size: 11px; color: var(--success); font-weight: 600; flex-shrink: 0; }

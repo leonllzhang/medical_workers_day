@@ -10,6 +10,9 @@ export default defineConfig({
         target: 'http://localhost:3001',
         ws: true,
       },
+      '/media': {
+        target: 'http://localhost:3001',
+      },
     },
   },
 })
