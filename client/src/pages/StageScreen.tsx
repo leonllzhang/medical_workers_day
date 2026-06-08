@@ -1,0 +1,444 @@
+import { useEffect, useState, useRef } from 'react'
+import { getSocket } from '../socket'
+import DanmakuOverlay from '../components/DanmakuOverlay'
+import { QRCodeCanvas } from 'qrcode.react'
+import type { GameStateData, Team } from '../types'
+import './StageScreen.css'
+
+const MOBILE_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}/mobile`
+
+// Sound effects using Web Audio API
+function playCorrectSound() {
+  try {
+    const ctx = new AudioContext()
+    const notes = [523, 659, 784, 1047]
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12)
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.12)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.3)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(ctx.currentTime + i * 0.12)
+      osc.stop(ctx.currentTime + i * 0.12 + 0.3)
+    })
+  } catch {}
+}
+
+function playWrongSound() {
+  try {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sawtooth'
+    osc.frequency.setValueAtTime(300, ctx.currentTime)
+    osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.5)
+    gain.gain.setValueAtTime(0.15, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.6)
+  } catch {}
+}
+
+function playLotterySound() {
+  try {
+    const ctx = new AudioContext()
+    const notes = [523, 587, 659, 784, 880, 1047, 1175, 1319]
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1)
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + i * 0.1)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.1 + 0.25)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(ctx.currentTime + i * 0.1)
+      osc.stop(ctx.currentTime + i * 0.1 + 0.25)
+    })
+  } catch {}
+}
+
+function playBuzzedSound() {
+  try {
+    const ctx = new AudioContext()
+    for (let i = 0; i < 5; i++) {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'triangle'
+      const freq = 400 + Math.random() * 400
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.08)
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + i * 0.08)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.08 + 0.15)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(ctx.currentTime + i * 0.08)
+      osc.stop(ctx.currentTime + i * 0.08 + 0.15)
+    }
+  } catch {}
+}
+
+const TEAM_COLORS: Record<string, string> = {
+  '内科': '#4d96ff', '外科': '#ff6b6b', '儿科': '#6bcb77',
+  '妇产科': '#ff8fab', '急诊科': '#ffd93d', '麻醉科': '#c084fc',
+  '检验科': '#fb923c', '影像科': '#34d399', '药剂科': '#f472b6',
+  '护理部': '#38bdf8',
+}
+
+export default function StageScreen() {
+  const [state, setState] = useState<GameStateData | null>(null)
+  const [sparkles, setSparkles] = useState<{ id: number; x: number; y: number }[]>([])
+  const [burstType, setBurstType] = useState<'correct' | 'wrong' | null>(null)
+  const sparkleIdRef = useRef(0)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoFilesRef = useRef<string[]>([])
+  const [currentVideo, setCurrentVideo] = useState<string>('')
+
+  // Probe for video files in /media/videos/
+  useEffect(() => {
+    fetch('/media/videos/')
+      .then(r => r.text())
+      .then(html => {
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(html, 'text/html')
+        const links = Array.from(doc.querySelectorAll('a'))
+        const videos = links
+          .map(a => a.getAttribute('href') || '')
+          .filter(h => /\.(mp4|webm|mov|avi)$/i.test(h))
+        videoFilesRef.current = videos
+        if (videos.length > 0) setCurrentVideo(`/media/videos/${videos[0]}`)
+      })
+      .catch(() => {}) // directory listing may not be enabled
+  }, [])
+
+  function triggerBurst(type: 'correct' | 'wrong') {
+    setBurstType(type)
+    const newSparkles = []
+    const count = type === 'correct' ? 40 : 20
+    for (let i = 0; i < count; i++) {
+      newSparkles.push({
+        id: sparkleIdRef.current++,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+      })
+    }
+    setSparkles(newSparkles)
+    if (type === 'correct') playCorrectSound()
+    else playWrongSound()
+    setTimeout(() => { setBurstType(null); setSparkles([]) }, 2500)
+  }
+
+  useEffect(() => {
+    const socket = getSocket()
+    socket.on('game:state', (data: GameStateData) => {
+      setState(data)
+      if (data.mode === 'buzzed') {
+        playBuzzedSound()
+      }
+      if (data.mode === 'lottery' && data.lotteryDraw) {
+        playLotterySound()
+      }
+      if (data.mode === 'result' && data.lastResult) {
+        triggerBurst(data.lastResult.correct ? 'correct' : 'wrong')
+      }
+      // Play video in quizzing mode
+      if (data.mode === 'quizzing' && videoRef.current && currentVideo) {
+        videoRef.current.play().catch(() => {})
+      }
+      // Pause video when leaving quizzing mode
+      if (data.mode !== 'quizzing' && videoRef.current) {
+        videoRef.current.pause()
+      }
+    })
+    // Auto-advance from result back to reading mode after showing animation
+    socket.on('result:continue', () => {
+      setBurstType(null)
+      setSparkles([])
+    })
+    return () => { socket.off('game:state'); socket.off('result:continue') }
+  }, [currentVideo])
+
+  if (!state) {
+    return (
+      <div className="stage-container">
+        <div className="stage-loading">连接中...</div>
+      </div>
+    )
+  }
+
+  const sortedTeams = [...state.teams].sort((a, b) => b.score - a.score)
+
+  return (
+    <div className="stage-container">
+      {/* Burst overlay */}
+      {burstType && (
+        <div className={`burst-overlay ${burstType}`}>
+          <div className={`burst-bg ${burstType}`} />
+          {[...Array(burstType === 'correct' ? 40 : 20)].map((_, i) => (
+            <div
+              key={sparkleIdRef.current++}
+              className={burstType === 'correct' ? 'sparkle-correct' : 'sparkle-wrong'}
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 0.5}s`,
+              }}
+            />
+          ))}
+          <div className="burst-text">
+            {burstType === 'correct' ? '🎉 回答正确！' : '💥 回答错误'}
+          </div>
+        </div>
+      )}
+
+      {/* Background video for quizzing mode */}
+      {state.mode === 'quizzing' && currentVideo && (
+        <video
+          ref={videoRef}
+          className="bg-video"
+          src={currentVideo}
+          loop
+          muted
+          playsInline
+        />
+      )}
+      {state.mode === 'quizzing' && !currentVideo && (
+        <div className="bg-video-placeholder">
+          <div className="placeholder-pulse">🎬 请将视频文件放入 media/videos/ 目录</div>
+        </div>
+      )}
+
+      {/* Top bar with mode badge */}
+      <header className="stage-header">
+        <h1 className="stage-title">🏥 <span className="gradient-text">医师节 · 智慧大比拼</span></h1>
+        <div className="stage-mode-badge">{modeLabel(state.mode)}</div>
+      </header>
+
+      {/* Main content area */}
+      <main className={`stage-content ${state.mode === 'quizzing' ? 'quizzing-mode' : ''}`}>
+        {/* Scoreboard — always visible as side panel */}
+        <div className="scoreboard-panel">
+          <h3 className="scoreboard-title">🏆 积分榜</h3>
+          <div className="scoreboard-list">
+            {sortedTeams.map((t, i) => (
+              <div
+                key={t.id}
+                className={`scoreboard-item ${state.buzzedTeam?.id === t.id ? 'highlighted' : ''}`}
+                style={{ borderLeftColor: t.color }}
+              >
+                <span className="sb-rank">{rankEmoji(i)}</span>
+                <span className="sb-name">{t.name}</span>
+                <span className="sb-buzzer">#{t.buzzerNumber}</span>
+                <span className="sb-score" style={{ color: t.color }}>{t.score}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Center content */}
+        <div className="stage-center">
+          {state.mode === 'waiting' && <WaitingMode />}
+          {state.mode === 'reading' && <ReadingMode question={state.currentQuestion} />}
+          {state.mode === 'quizzing' && <QuizzingMode question={state.currentQuestion} />}
+          {state.mode === 'buzzed' && <BuzzedMode team={state.buzzedTeam} />}
+          {state.mode === 'result' && state.lastResult && (
+            <ResultMode result={state.lastResult} />
+          )}
+          {state.mode === 'lottery' && state.lotteryDraw && (
+            <LotteryMode draw={state.lotteryDraw} />
+          )}
+          {state.mode === 'settlement' && (
+            <SettlementMode teams={sortedTeams} />
+          )}
+        </div>
+      </main>
+
+      {/* Danmaku */}
+      <DanmakuOverlay />
+    </div>
+  )
+}
+
+// ===================== Sub-components =====================
+
+function WaitingMode() {
+  const hostname = window.location.hostname
+  const port = window.location.port
+  const url = `${hostname}${port ? ':' + port : ''}/mobile`
+  return (
+    <div className="mode-waiting fade-in">
+      <div className="waiting-content">
+        <div className="waiting-qr-box">
+          <QRCodeCanvas value={`${window.location.protocol}//${url}`} size={220} bgColor="#ffffff" fgColor="#0a0e27" />
+          <p className="waiting-hint">扫码发送弹幕</p>
+          <p className="waiting-url">或访问 <strong>/{url.split('/').pop()}</strong></p>
+        </div>
+        <div className="waiting-decoration">
+          <div className="floating-docs">
+            <span className="doc-emoji" style={{ animationDelay: '0s' }}>👨‍⚕️</span>
+            <span className="doc-emoji" style={{ animationDelay: '0.5s' }}>👩‍⚕️</span>
+            <span className="doc-emoji" style={{ animationDelay: '1s' }}>🩺</span>
+            <span className="doc-emoji" style={{ animationDelay: '1.5s' }}>💊</span>
+            <span className="doc-emoji" style={{ animationDelay: '2s' }}>🏥</span>
+          </div>
+          <p className="waiting-quote">"医者仁心，妙手回春"</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReadingMode({ question }: { question: { id: number; text: string; image?: string; options?: string[] } | null }) {
+  if (!question) return <div className="mode-empty">请主持人选择题目</div>
+  return (
+    <div className="mode-reading fade-in">
+      <div className="reading-card">
+        <div className="reading-badge">第 {question.id} 题</div>
+        <h2 className="reading-text">{question.text}</h2>
+        {question.image && <img src={question.image} alt="" className="reading-img" />}
+        {question.options && (
+          <div className="reading-options">
+            {question.options.map((opt, i) => (
+              <div key={i} className="reading-option">
+                <span className="reading-option-label">{['A', 'B', 'C', 'D'][i]}</span>
+                <span>{opt}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function QuizzingMode({ question }: { question: { id: number; text: string } | null }) {
+  return (
+    <div className="mode-quizzing fade-in">
+      <div className="quiz-overlay-text">
+        <div className="quiz-status">🔴 抢答中</div>
+        {question && <div className="quiz-question-hint">{question.text}</div>}
+        <div className="quiz-waiting">
+          <span className="quiz-dot">.</span>
+          <span className="quiz-dot" style={{ animationDelay: '0.5s' }}>.</span>
+          <span className="quiz-dot" style={{ animationDelay: '1s' }}>.</span>
+        </div>
+        <p className="quiz-hint">等待主持人启动倒计时...</p>
+      </div>
+    </div>
+  )
+}
+
+function BuzzedMode({ team }: { team: Team | null }) {
+  if (!team) return null
+  return (
+    <div className="mode-buzzed fade-in">
+      <div className="buzzed-card" style={{ borderColor: team.color }}>
+        <div className="buzzed-corner">🎯</div>
+        <div className="buzzed-team-color" style={{ backgroundColor: team.color }} />
+        <div className="buzzed-info">
+          <p className="buzzed-buzzer">抢答器 #{team.buzzerNumber}</p>
+          <h2 className="buzzed-team-name" style={{ color: team.color }}>{team.name}</h2>
+          <p className="buzzed-waiting">等待主持人判定...</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResultMode({ result }: { result: { correct: boolean; teamId: string; teamName: string; points: number } }) {
+  return (
+    <div className={`mode-result fade-in ${result.correct ? 'result-correct' : 'result-wrong'}`}>
+      <div className="result-card">
+        <div className="result-icon">{result.correct ? '🎉' : '💥'}</div>
+        <h2 className="result-team">{result.teamName}</h2>
+        <div className={`result-verdict ${result.correct ? 'correct' : 'wrong'}`}>
+          {result.correct ? '回答正确！' : '回答错误！'}
+        </div>
+        <div className="result-points">
+          {result.points > 0 ? `+${result.points}` : result.points} 分
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LotteryMode({ draw }: { draw: { prize: { id: string; name: string; icon: string; description: string }; winners: Team[] } }) {
+  return (
+    <div className="mode-lottery fade-in">
+      <div className="lottery-stage">
+        <div className="lottery-stage-header">
+          <span className="lottery-stage-icon">🎊</span>
+          <h2>幸运抽奖</h2>
+        </div>
+        <div className="lottery-stage-prize">
+          <span className="lottery-prize-icon">{draw.prize.icon}</span>
+          <span className="lottery-prize-name">{draw.prize.name}</span>
+          <p className="lottery-prize-desc">{draw.prize.description}</p>
+        </div>
+        <div className="lottery-stage-divider">
+          {draw.winners.length > 1 ? `🎉 恭喜 ${draw.winners.length} 位中奖者 🎉` : '🎉 恭喜中奖 🎉'}
+        </div>
+        <div className={`lottery-stage-winners ${draw.winners.length > 1 ? 'multi' : ''}`}>
+          {draw.winners.map((w, i) => (
+            <div key={w.id} className="lottery-winner-chip" style={{ borderColor: w.color }}>
+              <div className="lottery-winner-badge" style={{ backgroundColor: w.color }}>
+                #{w.buzzerNumber}
+              </div>
+              <span className="lottery-winner-name" style={{ color: w.color }}>{w.name}</span>
+              <span className="lottery-winner-order">🏅</span>
+            </div>
+          ))}
+        </div>
+        <div className="lottery-stage-confetti">
+          {Array.from({ length: 40 }).map((_, i) => (
+            <div key={i} className="lottery-confetti-piece" style={{
+              left: `${Math.random() * 100}%`,
+              backgroundColor: ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#c084fc', '#ff8fab'][i % 6],
+              animationDelay: `${Math.random() * 2}s`,
+              animationDuration: `${2 + Math.random() * 2}s`,
+            }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SettlementMode({ teams }: { teams: Team[] }) {
+  return (
+    <div className="mode-settlement fade-in">
+      <div className="settlement-board-full">
+        <h2>🏆 最终排名</h2>
+        <div className="final-rank-list">
+          {teams.map((t, i) => (
+            <div key={t.id} className={`final-rank-item ${i < 3 ? 'podium' : ''}`}>
+              <span className="final-rank-num">{i < 3 ? ['🥇', '🥈', '🥉'][i] : `#${i + 1}`}</span>
+              <div className="final-rank-bar" style={{ width: `${(t.score / Math.max(teams[0]?.score || 1, 1)) * 100}%`, backgroundColor: t.color }} />
+              <span className="final-rank-name">{t.name}</span>
+              <span className="final-rank-score">{t.score}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ===================== Helpers =====================
+
+function modeLabel(mode: string): string {
+  const map: Record<string, string> = {
+    waiting: '等待中', reading: '读题中', quizzing: '抢答中',
+    buzzed: '已抢中', result: '判定', settlement: '结算',
+    lottery: '🎊 抽奖中',
+  }
+  return map[mode] || mode
+}
+
+function rankEmoji(i: number): string {
+  return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''
+}
