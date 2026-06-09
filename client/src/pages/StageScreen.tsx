@@ -300,7 +300,7 @@ export default function StageScreen() {
           ) : state.mode === 'quizzing' ? (
             <QuizzingMode question={state.currentQuestion} />
           ) : state.mode === 'buzzed' ? (
-            <BuzzedMode team={state.buzzedTeam} />
+            <BuzzedMode team={state.buzzedTeam} question={state.currentQuestion} />
           ) : state.mode === 'result' && state.lastResult ? (
             <ResultMode result={state.lastResult} />
           ) : state.mode === 'lottery' && state.lotteryDraw ? (
@@ -430,7 +430,7 @@ function QuizzingMode({ question }: { question: Question | null }) {
   )
 }
 
-function BuzzedMode({ team }: { team: Team | null }) {
+function BuzzedMode({ team, question }: { team: Team | null; question: Question | null }) {
   if (!team) return null
   return (
     <div className="mode-buzzed fade-in">
@@ -440,9 +440,25 @@ function BuzzedMode({ team }: { team: Team | null }) {
         <div className="buzzed-info">
           <p className="buzzed-buzzer">抢答器 #{team.buzzerNumber}</p>
           <h2 className="buzzed-team-name" style={{ color: team.color }}>{team.name}</h2>
-          <p className="buzzed-waiting">等待主持人判定...</p>
+          <p className="buzzed-waiting">请作答</p>
         </div>
       </div>
+      {question && (
+        <div className="buzzed-question-card">
+          <div className="buzzed-q-badge">第 {question.id} 题{question.type === 'fill' ? ' · 填空题' : ' · 选择题'}</div>
+          <h2 className="buzzed-q-text">{question.text}</h2>
+          {question.options && (
+            <div className="buzzed-q-options">
+              {question.options.map((opt, i) => (
+                <div key={i} className="buzzed-q-option">
+                  <span className="buzzed-q-opt-label">{['A','B','C','D'][i]}</span>
+                  <span>{opt}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
