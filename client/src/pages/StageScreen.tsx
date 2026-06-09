@@ -473,7 +473,7 @@ function ResultMode({ result }: { result: { correct: boolean; teamId: string; te
           {result.correct ? '回答正确！' : '回答错误！'}
         </div>
         <div className="result-points">
-          {result.points > 0 ? `+${result.points}` : result.points} 分
+          {result.points > 0 ? `+${result.points} 分` : '不加分'}
         </div>
       </div>
     </div>
