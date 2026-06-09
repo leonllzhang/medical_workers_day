@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { getSocket } from '../socket'
-import type { Team, Question } from '../types'
+import type { Team, Question, DrawSession } from '../types'
 import './AdminPage.css'
 
 // Round allocation algorithm
@@ -33,7 +33,7 @@ function autoAllocate(teams: Team[], participatingIds: Set<string>): Team[] {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'teams' | 'questions'>('teams')
+  const [tab, setTab] = useState<'teams' | 'draw' | 'questions'>('teams')
   const [teams, setTeams] = useState<Team[]>([])
   const [localTeams, setLocalTeams] = useState<Team[]>([])
   const [participating, setParticipating] = useState<Set<string>>(new Set())
@@ -45,6 +45,7 @@ export default function AdminPage() {
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [editNameMap, setEditNameMap] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState(false)
+  const [drawSession, setDrawSession] = useState<DrawSession | null>(null)
 
   const loadQuestions = useCallback(() => {
     getSocket().emit('admin:get-questions')
@@ -70,6 +71,9 @@ export default function AdminPage() {
       setTeams(data.teams)
       setSaved(false)
     })
+    socket.on('draw:state', (ds: DrawSession | null) => {
+      setDrawSession(ds)
+    })
 
     loadQuestions()
     getSocket().emit('admin:get-round-config')
@@ -79,6 +83,7 @@ export default function AdminPage() {
       socket.off('admin:import-result')
       socket.off('game:state')
       socket.off('admin:round-config')
+      socket.off('draw:state')
     }
   }, [loadQuestions, saved])
 
@@ -160,6 +165,42 @@ export default function AdminPage() {
     }
   }
 
+  // ---- Draw Ceremony Handlers ----
+  function handleStartDraw() {
+    getSocket().emit('admin:draw-start', { participatingIds: Array.from(participating) })
+  }
+
+  function handleDrawTeam() {
+    getSocket().emit('admin:draw-team')
+  }
+
+  function handleSkipAnimation() {
+    getSocket().emit('admin:draw-skip-animation')
+  }
+
+  function handleUndo() {
+    getSocket().emit('admin:draw-undo')
+  }
+
+  function handleCancelDraw() {
+    if (confirm('确定取消抽签？所有抽签进度将丢失')) {
+      getSocket().emit('admin:draw-cancel')
+    }
+  }
+
+  function handleSaveDraw() {
+    if (!drawSession || drawSession.phase !== 'complete') return
+    const config = drawSession.rounds.flatMap((roundTeams, rIdx) =>
+      roundTeams.map((t, tIdx) => ({
+        id: t.id,
+        round: rIdx + 1,
+        buzzerNumber: tIdx + 1,
+      }))
+    )
+    getSocket().emit('admin:save-round-config', { teams: config })
+    showStatus('抽签配置已保存')
+  }
+
   const distribution = calcRoundDistribution(participating.size)
   const participatingTeams = localTeams.filter(t => t.round > 0)
 
@@ -179,6 +220,9 @@ export default function AdminPage() {
       <div className="admin-tabs">
         <button className={`admin-tab ${tab === 'teams' ? 'active' : ''}`} onClick={() => setTab('teams')}>
           👥 队伍管理
+        </button>
+        <button className={`admin-tab ${tab === 'draw' ? 'active' : ''}`} onClick={() => setTab('draw')}>
+          🎯 抽签分组
         </button>
         <button className={`admin-tab ${tab === 'questions' ? 'active' : ''}`} onClick={() => setTab('questions')}>
           📋 题库管理
@@ -263,6 +307,129 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {tab === 'draw' && (
+          <section className="admin-section draw-section">
+            {!drawSession && (
+              <>
+                <h2>🎯 抽签分组</h2>
+                <p className="admin-hint">
+                  当前已勾选 <strong>{participating.size}</strong> 支参赛队伍。
+                  请确认参赛科室无误后，开始抽签仪式。
+                </p>
+                <div className="draw-setup-stats">
+                  <div className="draw-setup-stat">
+                    <div className="draw-setup-stat-value">{participating.size}</div>
+                    <div className="draw-setup-stat-label">参赛队伍</div>
+                  </div>
+                  <div className="draw-setup-stat">
+                    <div className="draw-setup-stat-value">{distribution.length}</div>
+                    <div className="draw-setup-stat-label">比赛轮次</div>
+                  </div>
+                  <div className="draw-setup-stat">
+                    <div className="draw-setup-stat-value">{distribution.map(d => d.size).join('+')}</div>
+                    <div className="draw-setup-stat-label">每轮队数</div>
+                  </div>
+                </div>
+                <div className="draw-actions">
+                  <button className="draw-btn-big" onClick={handleStartDraw}
+                    disabled={participating.size === 0}>
+                    🎯 开始抽签
+                  </button>
+                </div>
+              </>
+            )}
+
+            {drawSession && drawSession.phase !== 'complete' && (
+              <>
+                <div className="draw-leader-badge">
+                  👤 {drawSession.leaderLabels[drawSession.currentLeader]} 抽签中
+                </div>
+                <div className="draw-pool-count">
+                  剩余 <strong>{drawSession.pool.length}</strong> 支队伍待抽
+                </div>
+
+                {/* Progress cards */}
+                <div className="draw-progress">
+                  {drawSession.rounds.map((roundTeams, rIdx) => (
+                    <div key={rIdx} className={`draw-progress-round ${
+                      rIdx === drawSession.currentLeader ? 'active' :
+                      rIdx < drawSession.currentLeader ? 'complete' : ''
+                    }`}>
+                      <div className="draw-progress-round-header">
+                        第{rIdx + 1}轮
+                      </div>
+                      <div className="draw-progress-round-teams">
+                        {roundTeams.length === 0 && (
+                          <span className="draw-progress-empty">等待抽签</span>
+                        )}
+                        {roundTeams.map(t => (
+                          <span key={t.id} className="draw-progress-team-chip">
+                            <span className="draw-progress-team-dot" style={{ backgroundColor: t.color }} />
+                            {t.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="draw-actions">
+                  <button className={`draw-btn-big ${drawSession.phase === 'animation' ? 'animating' : ''}`}
+                    onClick={handleDrawTeam}
+                    disabled={drawSession.phase === 'animation' || drawSession.pool.length === 0}>
+                    {drawSession.phase === 'animation' ? '🎰 抽签中...' : '🎯 抽取队伍'}
+                  </button>
+                </div>
+                <div className="draw-actions">
+                  {drawSession.phase === 'animation' && (
+                    <button className="admin-btn" onClick={handleSkipAnimation}>
+                      跳过动画
+                    </button>
+                  )}
+                  <button className="admin-btn" onClick={handleUndo}
+                    disabled={drawSession.drawHistory.length === 0}>
+                    ↩ 撤销
+                  </button>
+                  <button className="admin-btn danger" onClick={handleCancelDraw}>
+                    ✕ 取消抽签
+                  </button>
+                </div>
+              </>
+            )}
+
+            {drawSession && drawSession.phase === 'complete' && (
+              <>
+                <div className="draw-summary">
+                  <h3>🎉 抽签完成！</h3>
+                  {drawSession.rounds.map((roundTeams, rIdx) => (
+                    <div key={rIdx} className="draw-summary-round">
+                      <div className="draw-summary-round-header">
+                        第{rIdx + 1}轮 · {drawSession.leaderLabels[rIdx]}
+                      </div>
+                      <div className="draw-summary-teams">
+                        {roundTeams.map((t, tIdx) => (
+                          <div key={t.id} className="draw-summary-team" style={{ borderLeftColor: t.color }}>
+                            <span className="draw-summary-buzzer">#{tIdx + 1}</span>
+                            <span className="draw-summary-name">{t.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="draw-actions" style={{ marginTop: 20 }}>
+                  <button className="admin-btn primary" onClick={handleSaveDraw}>
+                    💾 保存配置并开始比赛
+                  </button>
+                  <button className="admin-btn" onClick={handleCancelDraw}>
+                    重新抽签
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         )}
 

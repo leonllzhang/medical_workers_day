@@ -52,6 +52,19 @@ export interface GameStateData {
   questionGroup: number   // which question group to use (= currentRound typically)
 }
 
+export interface DrawSession {
+  active: boolean
+  phase: 'setup' | 'drawing' | 'animation' | 'complete'
+  pool: Team[]
+  rounds: Team[][]
+  currentLeader: number
+  totalLeaders: number
+  leaderLabels: string[]
+  teamsPerRound: number[]
+  animatingTeam: Team | null
+  drawHistory: { teamId: string; roundIndex: number }[]
+}
+
 export interface ScoreEntry {
   teamId: string
   name: string

@@ -67,6 +67,19 @@ interface LotteryDrawResult {
   winners: Team[];
 }
 
+interface DrawSession {
+  active: boolean;
+  phase: 'setup' | 'drawing' | 'animation' | 'complete';
+  pool: Team[];
+  rounds: Team[][];
+  currentLeader: number;
+  totalLeaders: number;
+  leaderLabels: string[];
+  teamsPerRound: number[];
+  animatingTeam: Team | null;
+  drawHistory: { teamId: string; roundIndex: number }[];
+}
+
 interface GameState {
   mode: GameMode;
   previousMode: GameMode;
@@ -92,10 +105,10 @@ const COLORS_32 = [
 ];
 
 const DEPT_NAMES = [
-  '内科','外科','儿科','妇产科','急诊科','麻醉科','检验科','影像科',
-  '药剂科','护理部','骨科','神经内科','神经外科','心血管内科','呼吸内科','消化内科',
-  '内分泌科','肾内科','泌尿外科','眼科','耳鼻喉科','口腔科','皮肤科','康复科',
-  '肿瘤科','病理科','超声科','核医学科','输血科','营养科','中医科','感染科',
+  '病理科','放射科','超声科','心电图室','数字化技术中心','麻醉科','皮肤科','口腔科',
+  '重症医学科','减重','神外','内科','神内','骨科','儿科','心血管内科',
+  '唇腭裂','血管瘤','颅颌面','外耳','综合整形一科','面颈','乳房整形','乳腺综合整形',
+  '脂肪','创伤修复','鼻整形','会阴整形','瘢痕与创面','综合整形二科','急诊创伤中心','激光美容中心',
 ];
 
 const DEFAULT_TEAMS: Team[] = DEPT_NAMES.map((name, i) => ({
@@ -258,12 +271,15 @@ let state: GameState = {
 const danmakuQueue: Danmaku[] = [];
 const MAX_DANMAKU = 50;
 
+let drawSession: DrawSession | null = null;
+let drawAnimationTimer: NodeJS.Timeout | null = null;
+
 // Built-in meme phrases
 const memePhrases = [
   '这题我会！快选我！',
   '张医生手速单身30年',
   '院长快发红包！',
-  '护士小姐姐最美！',
+  '医生小姐姐最美！',
   '内科永远的神！',
   '外科今天不加班！',
   '今天食堂加鸡腿了吗？',
@@ -299,6 +315,23 @@ function getSortedTeams(): Team[] {
 function resetForNewQuestion() {
   state.buzzedTeam = null;
   state.lastResult = null;
+}
+
+function broadcastDrawState() {
+  io.emit('draw:state', drawSession);
+}
+
+function calcRoundDistribution(n: number): number[] {
+  if (n <= 0) return [];
+  const maxPerRound = 8;
+  const numRounds = Math.ceil(n / maxPerRound);
+  const baseSize = Math.floor(n / numRounds);
+  const remainder = n % numRounds;
+  const result: number[] = [];
+  for (let r = 1; r <= numRounds; r++) {
+    result.push(baseSize + (r <= remainder ? 1 : 0));
+  }
+  return result;
 }
 
 // Parse pipe-delimited question text into Question objects
@@ -372,6 +405,11 @@ io.on('connection', (socket) => {
 
   // Send questions to newly connected client
   socket.emit('questions', questions);
+
+  // Send current draw session state if active
+  if (drawSession) {
+    socket.emit('draw:state', drawSession);
+  }
 
   // ---- Danmaku ----
   socket.on('danmaku:send', (data: { text: string; userName: string }) => {
@@ -541,6 +579,148 @@ io.on('connection', (socket) => {
     state.teams.forEach(t => { t.score = 0; });
     broadcastState();
     console.log(`[host] scores reset`);
+  });
+
+  // ==================== Draw Ceremony Events ====================
+
+  // ---- Admin: draw start ----
+  socket.on('admin:draw-start', (data: { participatingIds?: string[] }) => {
+    if (drawSession) {
+      socket.emit('host:error', '抽签已在进行中');
+      return;
+    }
+    // If participatingIds provided, mark those teams as participating
+    if (data?.participatingIds) {
+      state.teams.forEach(t => {
+        t.round = data.participatingIds!.includes(t.id) ? 1 : 0;
+      });
+    }
+    const participating = state.teams.filter(t => t.round > 0);
+    if (participating.length === 0) {
+      socket.emit('host:error', '没有参赛队伍，请先在队伍管理中勾选参赛科室');
+      return;
+    }
+    // Shuffle participating teams
+    const shuffled = [...participating].sort(() => Math.random() - 0.5);
+    const teamsPerRound = calcRoundDistribution(participating.length);
+    const numRounds = teamsPerRound.length;
+    const leaderLabels = Array.from({ length: numRounds }, (_, i) => `第${i + 1}位领导`);
+
+    drawSession = {
+      active: true,
+      phase: 'drawing',
+      pool: shuffled,
+      rounds: Array.from({ length: numRounds }, () => [] as Team[]),
+      currentLeader: 0,
+      totalLeaders: numRounds,
+      leaderLabels,
+      teamsPerRound,
+      animatingTeam: null,
+      drawHistory: [],
+    };
+
+    broadcastDrawState();
+    console.log(`[draw] started: ${participating.length} teams, ${numRounds} rounds, ${teamsPerRound.join('+')} per round`);
+  });
+
+  // ---- Admin: draw team (pull one from pool) ----
+  socket.on('admin:draw-team', () => {
+    if (!drawSession || !drawSession.active) {
+      socket.emit('host:error', '抽签未开始');
+      return;
+    }
+    if (drawSession.phase === 'animation') {
+      socket.emit('host:error', '正在动画中，请稍候');
+      return;
+    }
+    if (drawSession.pool.length === 0) {
+      socket.emit('host:error', '抽签池已空');
+      return;
+    }
+
+    // Randomly pick a team from pool
+    const randomIdx = Math.floor(Math.random() * drawSession.pool.length);
+    const picked = drawSession.pool.splice(randomIdx, 1)[0];
+
+    drawSession.animatingTeam = picked;
+    drawSession.phase = 'animation';
+
+    broadcastDrawState();
+
+    // Set 3-second timer for the animation
+    if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
+    drawAnimationTimer = setTimeout(() => {
+      if (!drawSession) return;
+
+      const leader = drawSession.currentLeader;
+      drawSession.rounds[leader].push(picked);
+      drawSession.drawHistory.push({ teamId: picked.id, roundIndex: leader });
+
+      // Check if current leader's round is full
+      if (drawSession.rounds[leader].length >= drawSession.teamsPerRound[leader]) {
+        // Move to next leader or complete
+        if (leader + 1 < drawSession.totalLeaders) {
+          drawSession.currentLeader++;
+          drawSession.phase = 'drawing';
+        } else {
+          drawSession.phase = 'complete';
+        }
+      } else {
+        drawSession.phase = 'drawing';
+      }
+
+      drawSession.animatingTeam = null;
+      broadcastDrawState();
+      console.log(`[draw] team drawn: ${picked.name} → round ${leader + 1}`);
+    }, 3000);
+  });
+
+  // ---- Admin: skip current animation ----
+  socket.on('admin:draw-skip-animation', () => {
+    if (!drawSession || drawSession.phase !== 'animation') return;
+    if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
+    drawSession.phase = 'drawing';
+    drawSession.animatingTeam = null;
+    broadcastDrawState();
+  });
+
+  // ---- Admin: undo last draw ----
+  socket.on('admin:draw-undo', () => {
+    if (!drawSession || !drawSession.active) return;
+    if (drawSession.phase === 'animation') {
+      // Cancel current animation, return team to pool
+      if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
+      if (drawSession.animatingTeam) {
+        drawSession.pool.push(drawSession.animatingTeam);
+      }
+      drawSession.animatingTeam = null;
+      drawSession.phase = 'drawing';
+      broadcastDrawState();
+      return;
+    }
+    if (drawSession.drawHistory.length === 0) return;
+
+    const last = drawSession.drawHistory.pop()!;
+    const roundIdx = last.roundIndex;
+    const teamIdx = drawSession.rounds[roundIdx].findIndex(t => t.id === last.teamId);
+    if (teamIdx !== -1) {
+      const team = drawSession.rounds[roundIdx].splice(teamIdx, 1)[0];
+      drawSession.pool.push(team);
+    }
+    drawSession.currentLeader = roundIdx;
+    drawSession.phase = 'drawing';
+    broadcastDrawState();
+  });
+
+  // ---- Admin: cancel entire draw ceremony ----
+  socket.on('admin:draw-cancel', () => {
+    if (drawAnimationTimer) {
+      clearTimeout(drawAnimationTimer);
+      drawAnimationTimer = null;
+    }
+    drawSession = null;
+    broadcastDrawState();
+    console.log(`[draw] cancelled`);
   });
 
   // ==================== Admin Events ====================

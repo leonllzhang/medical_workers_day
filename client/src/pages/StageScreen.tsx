@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { getSocket } from '../socket'
 import DanmakuOverlay from '../components/DanmakuOverlay'
 import { QRCodeCanvas } from 'qrcode.react'
-import type { GameStateData, Team, Question } from '../types'
+import type { GameStateData, Team, Question, DrawSession } from '../types'
 import './StageScreen.css'
 
 const MOBILE_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}/mobile`
@@ -63,6 +63,41 @@ function playLotterySound() {
   } catch {}
 }
 
+function playDrawTickSound() {
+  try {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(800, ctx.currentTime)
+    gain.gain.setValueAtTime(0.06, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.05)
+  } catch {}
+}
+
+function playDrawRevealSound() {
+  try {
+    const ctx = new AudioContext()
+    const notes = [523, 659, 784, 1047, 1319]
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12)
+      gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.12)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.5)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(ctx.currentTime + i * 0.12)
+      osc.stop(ctx.currentTime + i * 0.12 + 0.5)
+    })
+  } catch {}
+}
+
 function playBuzzedSound() {
   try {
     const ctx = new AudioContext()
@@ -90,6 +125,7 @@ export default function StageScreen() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoFilesRef = useRef<string[]>([])
   const [currentVideo, setCurrentVideo] = useState<string>('')
+  const [drawSession, setDrawSession] = useState<DrawSession | null>(null)
 
   // Probe for video files in /media/videos/
   useEffect(() => {
@@ -152,7 +188,14 @@ export default function StageScreen() {
       setBurstType(null)
       setSparkles([])
     })
-    return () => { socket.off('game:state'); socket.off('result:continue') }
+    socket.on('draw:state', (ds: DrawSession | null) => {
+      setDrawSession(ds)
+    })
+    return () => {
+      socket.off('game:state')
+      socket.off('result:continue')
+      socket.off('draw:state')
+    }
   }, [currentVideo])
 
   if (!state) {
@@ -208,10 +251,12 @@ export default function StageScreen() {
       {/* Mode badge only */}
       <header className="stage-header">
         <span />
-        <div className="stage-mode-badge">
-          {state.totalRounds > 0 && <span className="round-badge">第{state.currentRound}/{state.totalRounds}轮</span>}
-          {modeLabel(state.mode)}
-        </div>
+        {!drawSession?.active && (
+          <div className="stage-mode-badge">
+            {state.totalRounds > 0 && <span className="round-badge">第{state.currentRound}/{state.totalRounds}轮</span>}
+            {modeLabel(state.mode)}
+          </div>
+        )}
       </header>
 
       {/* Main content area */}
@@ -236,28 +281,32 @@ export default function StageScreen() {
         </div>
 
         {/* Center content */}
-        <div className="stage-center">
-          {state.mode === 'waiting' && <WaitingMode />}
-          {state.mode === 'reading' && <ReadingMode question={state.currentQuestion} />}
-          {state.mode === 'quizzing' && <QuizzingMode question={state.currentQuestion} />}
-          {state.mode === 'buzzed' && <BuzzedMode team={state.buzzedTeam} />}
-          {state.mode === 'result' && state.lastResult && (
+        <div className={`stage-center${drawSession?.active ? ' draw-mode' : ''}`}>
+          {drawSession?.active ? (
+            <DrawCeremonyMode session={drawSession} />
+          ) : state.mode === 'waiting' ? (
+            <WaitingMode />
+          ) : state.mode === 'reading' ? (
+            <ReadingMode question={state.currentQuestion} />
+          ) : state.mode === 'quizzing' ? (
+            <QuizzingMode question={state.currentQuestion} />
+          ) : state.mode === 'buzzed' ? (
+            <BuzzedMode team={state.buzzedTeam} />
+          ) : state.mode === 'result' && state.lastResult ? (
             <ResultMode result={state.lastResult} />
-          )}
-          {state.mode === 'lottery' && state.lotteryDraw && (
+          ) : state.mode === 'lottery' && state.lotteryDraw ? (
             <LotteryMode draw={state.lotteryDraw} />
-          )}
-          {state.mode === 'settlement' && (
+          ) : state.mode === 'settlement' ? (
             <SettlementMode teams={sortedTeams} />
-          )}
+          ) : null}
         </div>
       </main>
 
       {/* Danmaku — positioned at bottom when quiz is active */}
-      <DanmakuOverlay mode={state.mode} />
+      {!drawSession?.active && <DanmakuOverlay mode={state.mode} />}
 
       {/* Floating QR code — shown in bottom-right during quiz modes */}
-      {state.mode !== 'waiting' && state.mode !== 'settlement' && (
+      {!drawSession?.active && state.mode !== 'waiting' && state.mode !== 'settlement' && (
         <FloatingQR />
       )}
     </div>
@@ -424,6 +473,172 @@ function LotteryMode({ draw }: { draw: { prize: { id: string; name: string; icon
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+function DrawCeremonyMode({ session }: { session: DrawSession }) {
+  const [animatingIdx, setAnimatingIdx] = useState(-1)
+  const [celebrating, setCelebrating] = useState(false)
+  const animFrameRef = useRef<number>(0)
+  const prevTeamIdRef = useRef<string | undefined>(undefined)
+
+  // Slot-machine animation — triggered by animatingTeam changes
+  useEffect(() => {
+    const currentId = session.animatingTeam?.id
+    const prevId = prevTeamIdRef.current
+    prevTeamIdRef.current = currentId
+
+    if (!currentId) {
+      if (prevId) {
+        // Animation just ended (server timer fired) — reset animation idx only
+        setAnimatingIdx(-1)
+      } else {
+        // No animation — reset all
+        setAnimatingIdx(-1)
+        setCelebrating(false)
+      }
+      return
+    }
+
+    // New animation — build candidate list from session props via refs
+    // (avoid putting mutable objects in deps)
+    const pool = session.pool
+    const rounds = session.rounds
+    const candidates = pool.length > 0 ? pool : rounds.flat()
+    if (candidates.length === 0) return
+
+    const totalIterations = 28
+    let iteration = 0
+
+    function cycle() {
+      const randomIdx = Math.floor(Math.random() * candidates.length)
+      setAnimatingIdx(randomIdx)
+      iteration++
+      playDrawTickSound()
+
+      if (iteration < totalIterations - 6) {
+        animFrameRef.current = window.setTimeout(cycle, 55)
+      } else if (iteration < totalIterations) {
+        const delay = 55 + (iteration - (totalIterations - 6)) * 100
+        animFrameRef.current = window.setTimeout(cycle, delay)
+      } else {
+        const finalIdx = candidates.findIndex(t => t.id === currentId!)
+        setAnimatingIdx(finalIdx >= 0 ? finalIdx : 0)
+        setCelebrating(true)
+        playDrawRevealSound()
+        setTimeout(() => setCelebrating(false), 2500)
+      }
+    }
+
+    cycle()
+
+    return () => {
+      if (animFrameRef.current) clearTimeout(animFrameRef.current)
+    }
+  }, [session.animatingTeam?.id])
+
+  if (session.phase === 'complete') {
+    return (
+      <div className="draw-stage draw-complete fade-in">
+        <div className="draw-stage-title">🎉 抽签分组完成</div>
+        <div className="draw-rounds-grid">
+          {session.rounds.map((roundTeams, rIdx) => (
+            <div key={rIdx} className="draw-round-panel">
+              <div className="draw-round-panel-header">
+                第 {rIdx + 1} 轮 · {session.leaderLabels[rIdx]}
+              </div>
+              <div className="draw-round-panel-teams">
+                {roundTeams.map((t, tIdx) => (
+                  <div key={t.id} className="draw-round-team" style={{ borderLeftColor: t.color }}>
+                    <span className="draw-round-buzzer">#{tIdx + 1}</span>
+                    <span className="draw-round-name">{t.name}</span>
+                    <span className="draw-round-color" style={{ backgroundColor: t.color }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Pool is the remaining teams to draw
+  const poolTeams = session.pool
+  const allPool = poolTeams.length > 0
+    ? poolTeams
+    : session.rounds.flat()
+
+  return (
+    <div className="draw-stage fade-in">
+      <div className="draw-stage-header">
+        <div className="draw-stage-leader">
+          👤 {session.leaderLabels[session.currentLeader]}
+        </div>
+        <div className="draw-stage-subtitle">
+          正在抽选第 {session.currentLeader + 1} 轮队伍
+          <span className="draw-stage-count">剩余 {session.pool.length} 队</span>
+        </div>
+      </div>
+
+      <div className="draw-stage-body">
+        {/* Left: pool area with slot machine */}
+        <div className="draw-stage-pool">
+          <div className="draw-stage-pool-title">抽签池</div>
+          <div className="draw-stage-pool-grid">
+            {poolTeams.map((t, i) => (
+              <div
+                key={t.id}
+                className={`draw-pool-card ${animatingIdx === i ? 'highlighted' : ''} ${celebrating && animatingIdx === i ? 'celebrating' : ''}`}
+                style={{ borderLeftColor: t.color }}
+              >
+                <span className="draw-pool-card-name">{t.name}</span>
+              </div>
+            ))}
+            {poolTeams.length === 0 && (
+              <div className="draw-pool-empty">所有队伍已抽完</div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: rounds panels */}
+        <div className="draw-stage-rounds">
+          {session.rounds.map((roundTeams, rIdx) => (
+            <div key={rIdx} className={`draw-round-panel ${rIdx === session.currentLeader ? 'active' : ''} ${rIdx < session.currentLeader ? 'done' : ''}`}>
+              <div className="draw-round-panel-header">
+                第 {rIdx + 1} 轮
+                {rIdx < session.currentLeader && <span className="draw-round-check">✓</span>}
+              </div>
+              <div className="draw-round-panel-teams">
+                {roundTeams.map((t, tIdx) => (
+                  <div key={t.id} className="draw-round-team" style={{ borderLeftColor: t.color }}>
+                    <span className="draw-round-buzzer">#{tIdx + 1}</span>
+                    <span className="draw-round-name">{t.name}</span>
+                  </div>
+                ))}
+                {roundTeams.length === 0 && (
+                  <div className="draw-round-empty">等待抽签</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Confetti when celebrating */}
+      {celebrating && (
+        <div className="draw-confetti">
+          {Array.from({ length: 30 }).map((_, i) => (
+            <div key={i} className="draw-confetti-piece" style={{
+              left: `${Math.random() * 100}%`,
+              backgroundColor: ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c084fc','#ff8fab'][i % 6],
+              animationDelay: `${Math.random() * 0.5}s`,
+              animationDuration: `${1.5 + Math.random() * 1.5}s`,
+            }} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
