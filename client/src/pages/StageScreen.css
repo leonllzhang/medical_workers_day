@@ -18,6 +18,24 @@
   height: 100%; font-size: 32px; color: #636e72;
 }
 
+/* Event title overlaid on background image */
+.stage-event-title {
+  position: absolute;
+  top: 200px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
+  font-size: 64px;
+  font-weight: 900;
+  color: #225e68;
+  text-shadow: 0 2px 16px rgba(255,255,255,0.6);
+  letter-spacing: 6px;
+  white-space: nowrap;
+  text-align: center;
+}
+
 /* ====== Header ====== */
 .stage-header {
   display: flex; align-items: center; justify-content: flex-end;

@@ -247,7 +247,8 @@ export default function StageScreen() {
 
   return (
     <div className="stage-container">
-      {/* Burst overlay */}
+      {/* Event title — centered on background image */}
+      <div className="stage-event-title">2026年医师节「以赛促学，砺技求精」</div>
       {burstType && (
         <div className={`burst-overlay ${burstType}`}>
           <div className={`burst-bg ${burstType}`} />
