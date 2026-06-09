@@ -122,9 +122,7 @@ export default function StageScreen() {
   const [sparkles, setSparkles] = useState<{ id: number; x: number; y: number }[]>([])
   const [burstType, setBurstType] = useState<'correct' | 'wrong' | null>(null)
   const sparkleIdRef = useRef(0)
-  const videoRef = useRef<HTMLVideoElement>(null)
   const videoFilesRef = useRef<string[]>([])
-  const [currentVideo, setCurrentVideo] = useState<string>('')
   const [drawSession, setDrawSession] = useState<DrawSession | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const audioFilesRef = useRef<string[]>([])
@@ -180,14 +178,8 @@ export default function StageScreen() {
       if (data.mode === 'result' && data.lastResult) {
         triggerBurst(data.lastResult.correct ? 'correct' : 'wrong')
       }
-      // When quizzing starts: pick random video and audio
+      // When quizzing starts: pick random audio
       if (data.mode === 'quizzing') {
-        const videos = videoFilesRef.current
-        if (videos.length > 0) {
-          setCurrentVideo(`/media/videos/${encodeURIComponent(videos[Math.floor(Math.random() * videos.length)])}`)
-        } else {
-          setCurrentVideo('')
-        }
         const audios = audioFilesRef.current
         if (audios.length > 0) {
           setCurrentAudio(`/media/audio/${encodeURIComponent(audios[Math.floor(Math.random() * audios.length)])}`)
@@ -214,18 +206,11 @@ export default function StageScreen() {
     }
   }, [])
 
-  // Play/pause video and audio when quizzing mode or source changes
+  // Play/pause audio when quizzing mode or source changes
   useEffect(() => {
     if (!state || state.mode !== 'quizzing') {
-      if (videoRef.current) { videoRef.current.pause() }
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.removeAttribute('src') }
       return
-    }
-    // Mode is quizzing — play muted video (reliable autoplay)
-    if (currentVideo && videoRef.current) {
-      videoRef.current.src = currentVideo
-      videoRef.current.currentTime = 0
-      videoRef.current.play().catch(() => {})
     }
     // Play audio only if unlocked by user gesture
     if (currentAudio && audioRef.current && audioUnlocked) {
@@ -233,7 +218,7 @@ export default function StageScreen() {
       audioRef.current.currentTime = 0
       audioRef.current.play().catch(() => {})
     }
-  }, [state?.mode, currentVideo, currentAudio, audioUnlocked])
+  }, [state?.mode, currentAudio, audioUnlocked])
 
   if (!state) {
     return (
@@ -313,12 +298,7 @@ export default function StageScreen() {
           ) : state.mode === 'reading' ? (
             <ReadingMode question={state.currentQuestion} />
           ) : state.mode === 'quizzing' ? (
-            <>
-              {currentVideo && (
-                <video ref={videoRef} className="quiz-video" loop muted playsInline />
-              )}
-              <QuizzingMode question={state.currentQuestion} />
-            </>
+            <QuizzingMode question={state.currentQuestion} />
           ) : state.mode === 'buzzed' ? (
             <BuzzedMode team={state.buzzedTeam} />
           ) : state.mode === 'result' && state.lastResult ? (
