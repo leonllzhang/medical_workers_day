@@ -41,7 +41,7 @@ export default function AdminPage() {
   const [importText, setImportText] = useState('')
   const [importGroup, setImportGroup] = useState(1)
   const [filterGroup, setFilterGroup] = useState(0)
-  const [importResult, setImportResult] = useState<{ success: boolean; count: number; errors: number; message?: string } | null>(null)
+  const [importResult, setImportResult] = useState<{ success: boolean; count: number; errorLines?: { line: number; text: string; reason: string }[]; message?: string } | null>(null)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [editNameMap, setEditNameMap] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState(false)
@@ -56,7 +56,7 @@ export default function AdminPage() {
     socket.on('admin:questions', (qs: Question[]) => {
       setQuestions(qs)
     })
-    socket.on('admin:import-result', (r: { success: boolean; count: number; errors: number; message?: string }) => {
+    socket.on('admin:import-result', (r: { success: boolean; count: number; errorLines?: { line: number; text: string; reason: string }[]; message?: string }) => {
       setImportResult(r)
       if (r.success) loadQuestions()
     })
@@ -305,9 +305,22 @@ export default function AdminPage() {
               </div>
               {importResult && (
                 <div className={`admin-import-result ${importResult.success ? 'ok' : 'fail'}`}>
-                  {importResult.success
-                    ? `✅ 成功导入 ${importResult.count} 题${importResult.errors ? `，${importResult.errors} 行格式错误被跳过` : ''}`
-                    : `❌ ${importResult.message || '导入失败'}`}
+                  <div>
+                    {importResult.success
+                      ? `✅ 成功导入 ${importResult.count} 题${importResult.errorLines?.length ? `，${importResult.errorLines.length} 行格式错误被跳过` : ''}`
+                      : `❌ ${importResult.message || '导入失败'}`}
+                  </div>
+                  {importResult.errorLines && importResult.errorLines.length > 0 && (
+                    <div className="import-error-detail">
+                      {importResult.errorLines.map((e, i) => (
+                        <div key={i} className="import-error-line">
+                          <span className="err-line-num">第{e.line}行</span>
+                          <span className="err-line-text">{e.text}</span>
+                          <span className="err-line-reason">{e.reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </section>

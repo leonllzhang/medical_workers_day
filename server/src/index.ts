@@ -108,24 +108,122 @@ const DEFAULT_TEAMS: Team[] = DEPT_NAMES.map((name, i) => ({
 }));
 
 // ==================== Question Bank ====================
-let questions: Question[] = [
-  { id: 1, type: 'choice', text: '人体最大的器官是什么？', options: ['心脏', '肝脏', '皮肤', '大脑'], answer: 'C', group: 1 },
-  { id: 2, type: 'choice', text: '正常成人的静息心率范围是多少？（次/分钟）', options: ['40-60', '60-100', '100-120', '120-140'], answer: 'B', group: 1 },
-  { id: 3, type: 'choice', text: '以下哪种维生素可以通过阳光照射在皮肤中合成？', options: ['维生素A', '维生素B', '维生素C', '维生素D'], answer: 'D', group: 1 },
-  { id: 4, type: 'choice', text: '"白大褂"的发明最初是为了什么？', options: ['彰显权威', '便于清洁消毒', '区分科室', '保暖'], answer: 'B', group: 1 },
-  { id: 5, type: 'choice', text: '人体中含量最多的物质是什么？', options: ['蛋白质', '脂肪', '水', '钙'], answer: 'C', group: 1 },
-  { id: 6, type: 'choice', text: '世界卫生组织的缩写是什么？', options: ['WTO', 'WHO', 'WTF', 'WIPO'], answer: 'B', group: 1 },
-  { id: 7, type: 'choice', text: '"医者仁心"最早出自哪本古籍？', options: ['《黄帝内经》', '《本草纲目》', '《千金要方》', '《伤寒杂病论》'], answer: 'A', group: 1 },
-  { id: 8, type: 'choice', text: '护理人员"三查七对"中的"七对"不包括以下哪项？', options: ['床号', '姓名', '年龄', '药品'], answer: 'C', group: 1 },
-  { id: 9, type: 'choice', text: '医生在病历上写的"QD"是什么意思？', options: ['每天一次', '每四小时', '紧急', '停止'], answer: 'A', group: 1 },
-  { id: 10, type: 'choice', text: '以下哪个不是医院常见的科室？', options: ['内科', '外科', '天文科', '儿科'], answer: 'C', group: 1 },
-  { id: 11, type: 'choice', text: '"手术室"的无菌级别是？', options: ['Ⅰ级', 'Ⅱ级', 'Ⅲ级', 'Ⅳ级'], answer: 'A', group: 1 },
-  { id: 12, type: 'choice', text: '哪项检查被称为"医生的听诊器延伸"？', options: ['CT', 'MRI', '超声', '心电图'], answer: 'C', group: 1 },
-  { id: 13, type: 'fill', text: '医院里用于求助的紧急呼叫号码是____', answer: '120', group: 1 },
-  { id: 14, type: 'choice', text: '医学上"生命体征"不包括以下哪项？', options: ['体温', '脉搏', '体重', '血压'], answer: 'C', group: 1 },
-  { id: 15, type: 'choice', text: '"希波克拉底誓言"是哪个职业的职业道德准则？', options: ['护士', '医生', '药师', '技师'], answer: 'B', group: 1 },
-];
-let nextQuestionId = 16;
+const DEFAULT_QUESTIONS_TEXT = `
+首诊医师接诊患者后，如刚好要下班，可以将患者做何处理？|A.让患者到它院诊治|B.移交给接班医师|C.等上班后再继续诊治
+主治医师应对所管病人每____天查房一次|A.1 天|B.2 天|C.3 天|D.4 天
+新技术 (新项目) 引进，医政 (务) 科组织学术委员会专家进行论证，提出意见，报____批准后方可开展实施。|A.主管院长|B.财务科|C.相关科室科主任
+对新入院普通病人，住院医师应在____小时内进行诊治并开具医嘱。|A.1 小时|B.2 小时|C.6 小时|D.12 小时
+按手术分级管理制度，住院医师可单独完成的手术是____|A.一级手术|B.二级手术|C.三级手术|D.四级手术
+急诊会诊，相关科室在接到会诊通知后，应在多长时间内到位？|A.10 分钟|B.15 分钟|C.20 分钟|D.30 分钟
+给药前，注意询问有无过敏史；使用剧、毒、麻、限药时要经过反复核对；静脉给药要注意有无变质，瓶口有无松动、裂缝；给多种药物时，要注意____。|A.药物剂量|B.药物浓度|C.配伍禁忌
+在抢救危重症时，未能及时记录的，有关医务人员应当在抢救结束后几小时内据实补记并加以说明。|A.2 小时|B.6 小时|C.4 小时|D.5 小时
+死亡病例，一般情况下应在____内组织讨论，特殊病例 (存在医疗纠纷) 应在____内进行讨论。|A.1 天、6 小时|B.3 天、12 小时|C.1 周、1 天|D.5 天、1 天
+不属于医疗核心制度的是：|A.首诊负责制|B.三级医生查房制|C.医院感染管理制度
+手术记录应当在术后____内完成。|A.6 小时|B.12 小时|C.24 小时|D.三天
+科内会诊原则上应____, 全科人员参加。主要对本科的疑难病例、危重病例、手术病例、出现严重并发症病例或具有科研教学价值的病例等进行全科会诊。会诊由科主任或总住院医师负责组织和召集。会诊时由主管医师报告病历、诊治情况以及要求会诊的目的。通过广泛讨论，明确诊断治疗意见，提高科室人员的业务水平。|A.每周举行两次|B.每周举行一次|C.每两周举行一次|D.每月举行一次
+填空题：首诊医师接诊患者后，如刚好要下班，应将患者移交给____。
+填空题：主治医师应对所管病人每____天查房一次。
+填空题：按手术分级管理制度，低年资住院医师可以在上级指导下主持的手术是____级手术。
+填空题：高年资主治医师可最高主持____级手术。
+填空题：院区内急诊会诊，相关科室在接到会诊通知后，应在____分钟内到位。
+填空题：给药前，注意询问有无过敏史；使用剧、毒、麻、限药时要经过反复核对；静脉给药要注意有无变质，瓶口有无松动、裂缝；给多种药物时，要注意____。
+填空题：手术记录应当在术后____小时内完成。
+填空题：病区值班需有一、二线和三线值班人员，____线值班人员为主治医师或副主任医师。
+填空题：对新入院普通病人，住院医师应在____小时内进行诊治并开具医嘱。
+填空题：在抢救危重症时，未能及时记录的，有关医务人员应当在抢救结束后____小时内据实补记并加以说明。
+填空题：死亡病例，一般情况下应在____天内组织讨论，特殊病例（存在医疗纠纷）应在____天内进行讨论。
+填空题：科内会诊原则上应每____天举行一次，全科人员参加。
+入院 3 天未确诊，治疗效果不佳，病情严重的患者应：|A.转入上级医院诊疗|B.组织会诊讨论|C.上报院领导处理
+病区值班需有一、二线和三线值班人员____值班人员为主治医师或副主任医师，进修医师值班时应在本院医师指导下进行医疗工作。|A.一线|B.二线|C.三线
+一般患者每周应有 2 次____查房记录，并加以注明|A.住院医师|B.主治医师|C.主任医师 (或副主任医师)
+重危患者的病程记录每天至少 1 次，病情发生变化时，随时记录，记录时间应具体到分钟，对病情稳定患者至少____天记录一次病程记录。|A.2|B.3|C.4
+____医师夜间必须在值班室留宿，不得擅自离开工作岗位，遇到需要处理的情况时应立即前往诊治。如有急诊抢救、会诊等需要离开病区时，必须向值班护士说明去向及联系方法。|A.听班医师|B.值班医师|C.值、听班医师
+新入院患者，____小时内应有主治医师以上职称医师查房记录|A.24|B.48|C.72
+主治医师应在____小时内对新入院病人完成检诊，提出诊断和治疗意见。|A.6 小时 (节假日 8 小时)|B.12 小时 (节假日 24 小时)|C.24 小时 (节假日 48 小时)|D.72 小时
+一次用血、备血量超过____时，《输血申请单》需要科主任和输血科主任签字，并报医务科批准|A.800ml|B.1600ml|C.2500ml|D.5000ml
+院医师应在病人出院前____小时内完成出院小结|A.6 小时|B.12 小时|C.24 小时|D.48 小时
+入院 10 天仍诊断不明或治疗效果不好的，应组织____会诊。|A.科内会诊|B.科间会诊|C.全院会诊|D.院外会诊
+下列关于首诊负责制，理解正确的是：|A.谁首诊，谁负责；首诊医生应仔细询问病史，进行体格检查，认真进行诊治，做好病历记录|B.首诊医生发现患者所患疾病不属于本专业范畴，可以建议转相关科室，无需做病历记录|C.对于新入院患者必须在 1 小时内诊治；危、急、重患者必须立即接诊，并报告上级医生
+一般情况下，择期手术的麻醉术前谈话和手术前谈话及签字应在什么时间进行？|A.必须在手术前一日完成|B.必须在手术前二日完成|C.必须在手术前三日完成|D.必须在手术前四日完成
+填空题：危重患者的病程记录每天至少____次，病情发生变化时，随时记录，记录时间应具体到分钟，对病情稳定患者至少____天记录一次病程记录。
+填空题：____医师夜间必须在值班室留宿，不得擅自离开工作岗位。
+填空题：入院患者，____小时内应有主治医师以上职称医师查房记录。
+填空题：一般情况下，择期手术的麻醉术前谈话和手术前谈话及签字应在____（时间）完成。
+填空题：嘱必须每日总查对____次
+填空题：会诊医师必须具备的最低职称条件是____。
+填空题：通会诊应当在会诊发出后____小时内完成。
+填空题：术后患者必须连续____天查房。
+填空题：低年资主治医师可在上级指导下主持的手术级别是____级手术
+填空题：一般患者每周应有2次____医师查房记录，并加以注明。
+填空题：日主治医师应在____小时内对新入院病人完成检诊，提出诊断和治疗意见。
+填空题：一次用血、备血量超过____毫升时，《输血申请单》需要科主任和输血科主任签字，并报医务科批准。
+因抢救急危患者，未能及时书写病历的，有关医务人员应当在抢救结束后____小时内据实补记，并加以注明。|A.1 小时|B.2 小时|C.6 小时|D.12 小时
+院区内急会诊要求会诊医师在多长时间内到位？|A.5 分钟|B.10 分钟|C.15 分钟|D.20 分钟
+病人入院 7 天仍诊断不明或治疗效果不好的，应组织____会诊。|A.科内会诊|B.科间会诊|C.全院会诊|D.院外会诊
+年资副主任医师：担任副主任医师____年以上。|A.3|B.4|C.5
+紧急情况下住院医师可越级使用高于权限的抗菌药物多长时间的用量？|A.1 天|B.2 天|C.3 天|D.4 天
+嘱必须每日总查对多少次？|A.1 次|B.2 次|C.3 次|D.4 次
+张门诊处方不得超过多少种药品？|A.3 种|B.4 种|C.5 种|D.7 种
+关于 "三级查房", 正确的是____|A.副主任以上医师每周查房 1 次|B.主治医师每周查房两次|C.主治医师遇有疑难、危急病例，及时向上级医师或科主任报告|D.主治医师无需检查住院医师、进修医师的医嘱
+人出院前，哪级医师必须查房？|A.住院医师|B.经治医师|C.主治医师|D.经治医师和上级医师
+专业技术职务医师每周查访至少：|A.1 次|B.2 次|C.3 次|D.4 次
+入院 3 天仍诊断不明或治疗效果不好的，应组织____会诊。|A.科内会诊|B.科间会诊|C.全院会诊|D.院外会诊
+关于抢救中执行口头医嘱，下列说法哪些是错误的？|A.护士执行前必须复述一遍，确认无误后执行|B.保留安瓶以备事后查对|C.护理记录单要及时记录|D.来不及记录护理记录单的，可于抢救后 12 小时内据实补记并加以说明
+填空题：二线值班医师在接到病区有紧急抢救任务后，必须在____分钟内赶到抢救病房。
+填空题：第一次接诊的医师和科室称为____和____。
+填空题：三级查房制度是指____、____和____三级医师查房。
+填空题：医疗机构应严格明确查房周期，工作日每天至少查房____次，非工作日每天至少查房____次。
+填空题：术者必须亲自在术前及术后____小时内查房
+填空题：按紧急程度，会诊分为____ 和 ____ 。
+填空题：急危重症患者及____级手术患者手术当日必须床旁交班。
+填空题：三方核查是指由____、____和____三方核对患者姓名、诊断、手术部位、手术方式等。
+填空题：病人入院____天仍诊断不明或治疗效果不好的，应组织科间会诊。
+填空题：高年资副主任医师是指担任副主任医师____年以上者。
+填空题：紧急情况下住院医师可越级使用高于权限的抗菌药物____天的用量。
+填空题：高级专业技术职务医师每周查房至少____次。
+关于病历书写哪项是错误的|A.药名不能用符号或缩写，一种药名不能中英文混写|B.患者姓名、性别、联系电话等基本信息由挂号人员或患者本人填写，但接诊医师应予以核实、完善|C.医务人员应签全名，随机 3 人不能辨认即认为不合格 (潦草签名)|D.冒用或临摹代替他人签名
+死亡病例讨论由____汇报病情、诊治及抢救经过、死亡原因初步分析及死亡初步诊断等。|A.主管医师|B.二线医师|C.科主任
+关于分级护理的描述，下列哪项是正确的？|A.特级护理：严密观察病情变化，一般每 15-30min 巡视病人一次|B.一级护理：制定护理计划，严格执行各项诊疗及护理措施及时准确逐项填写危重患者护理记录|C.二级护理：适用于病情较轻，生活能基本自理的病人|D.三级护理：给予卫生保健指导，督促病人遵守院规，满足病人身心需求
+二级护理要求每____小时巡视患者一次|A.1 小时|B.2-3 小时|C.4 小时|D.8 小时
+关于首诊负责制，哪项是正确的|A.首诊医师诊治困难，请上级医师指导|B.因存在他科疾病，在未请求会诊的情况下转入他科|C.经会诊明确为他科疾病，首诊护士不予处理病人|D.因家属强烈要求将病人转送他院，未派医护人员护送
+会诊医师必须具备的最低职称条件是|A.住院医师|B.主治医师|C.副主任医师|D.主任医师
+一般处方不得超过____天用药量；急诊处方不得超过____天用药量。|A.3 天，1 天|B.7 天，3 天|C.7 天，5 天|D.7 天，1 天
+关于电子病历哪种说法错误|A.电子病历必须符合卫生部的《电子病历基本规范》|B.目前病历电子档与纸本档并存，不属于电子病历|C.不得将病情记录病历内容存储在电脑中一次性打印|D.病历电子化过程可以不按《病历书写规范》执行
+关于病历质量控制错误的是|A.上级医师要履行职责，及时对病历进行督查、修改、考核|B.护理人员按照有关要求做好护理病历书写，粘贴检查报告等|C.医务部、护理部定期对在院病历、出院病历抽查考核|D.病案室对病历存在的问题未通知当事人修改
+严格落实门诊会诊制度，凡疑难疾病、症状 (体征) 难以确诊、____次含以上门诊未能确诊或不明原因治疗效果欠佳时，应按照会诊管理规定组织门诊会诊。|A.2 次|B.3 次|C.5 次|D.6 次
+初步诊断时，对待查病历应列出|A.全部诊断|B.3 个以上诊断|C.可能性较大的诊断|D.2 个以下诊断
+关于会诊说法错误的是|A.会诊医师接通知单后应签收并注明时间，应 24 小时内完成会诊|B.会诊时申请医师应全程陪同，介绍病情，听取会诊意见|C.会诊医师遇疑难问题或病情复杂时，应请上级医师协助会诊，尽快提出处理意见|D.急会诊时，会诊医师必须在 15 分钟内到达申请科室会诊
+填空题：三方核查需要在____前、____前、____前，对患者身份、手术部位、手术方式等进行多方参与的核查。
+填空题：针对住院手术患者，需完善____病历文书后，方可开立手术医嘱、患者签署知情同意书。
+填空题：按会诊范围，会诊分为____和____。
+填空题：未取得____的本院医师、进修医师、实习医师不得独立承担值班任务。
+填空题：交接班内容应当专册记录，并由____和____共同签字确认。
+填空题：疑难病例均应由科室或医疗管理部门组织开展讨论。讨论原则上应由____主持，全科人员参加。
+填空题：____制度要求，对疑难危重、新开展或四级手术必须进行术前讨论。
+填空题：严格落实门诊会诊制度，凡疑难疾病、症状（体征）难以确诊、____次含以上门诊未能确诊或不明原因治疗效果欠佳时，应按照会诊管理规定组织门诊会诊。
+填空题：参加疑难病例讨论成员中应当至少有____人具有主治及以上专业技术职务任职资格。
+填空题：三查制度是指____。
+填空题：为无名患者进行诊疗活动时，必须____人核对，确保对正确的患者实施正确的治疗。
+填空题：疑难病例讨论制度中，讨论记录由____和____审核签字。
+`.trim();
+
+const GROUP_LINE_COUNTS = [24, 24, 24, 24]; // Questions per group
+let nextQuestionId = 1;
+let questions: Question[] = [];
+
+function loadDefaultQuestions() {
+  questions = [];
+  nextQuestionId = 1;
+  const lines = DEFAULT_QUESTIONS_TEXT.split('\n');
+  let lineIdx = 0;
+  for (let g = 0; g < 4; g++) {
+    const groupLines = lines.slice(lineIdx, lineIdx + GROUP_LINE_COUNTS[g]).join('\n');
+    const parsed = parseQuestionsFromText(groupLines, g + 1);
+    questions.push(...parsed);
+    lineIdx += GROUP_LINE_COUNTS[g];
+  }
+}
+loadDefaultQuestions();
 
 // ==================== Prizes ====================
 const PRIZES: Prize[] = [
@@ -201,6 +299,55 @@ function getSortedTeams(): Team[] {
 function resetForNewQuestion() {
   state.buzzedTeam = null;
   state.lastResult = null;
+}
+
+// Parse pipe-delimited question text into Question objects
+function parseQuestionsFromText(text: string, group: number): Question[] {
+  const lines = text.split('\n').filter((l: string) => l.trim());
+  const result: Question[] = [];
+  const cleanOpt = (s: string) => s.replace(/^[A-D]\.\s*/, '');
+
+  for (const line of lines) {
+    const parts = line.split('|').map((s: string) => s.trim());
+
+    // 6 parts: text|A|B|C|D|answerLetter → 4 options with answer
+    if (parts.length === 6 && /^[A-D]$/i.test(parts[5])) {
+      result.push({ id: nextQuestionId++, text: parts[0], options: parts.slice(1, 5).map(cleanOpt), type: 'choice', answer: parts[5].toUpperCase(), group });
+      continue;
+    }
+
+    // 5 parts: text|A|B|C|D (4 options, no answer) OR text|A|B|C|answer (3 options with answer)
+    if (parts.length === 5) {
+      if (/^[A-D]$/i.test(parts[4])) {
+        // 3 options with answer
+        result.push({ id: nextQuestionId++, text: parts[0], options: parts.slice(1, 4).map(cleanOpt), type: 'choice', answer: parts[4].toUpperCase(), group });
+      } else {
+        // 4 options no answer
+        result.push({ id: nextQuestionId++, text: parts[0], options: parts.slice(1, 5).map(cleanOpt), type: 'choice', group });
+      }
+      continue;
+    }
+
+    // 4 parts: text|A|B|C → 3 options no answer
+    if (parts.length === 4) {
+      result.push({ id: nextQuestionId++, text: parts[0], options: parts.slice(1, 4).map(cleanOpt), type: 'choice', group });
+      continue;
+    }
+
+    // 2 parts with ____: text_with____|answer → fill
+    if (parts.length === 2 && parts[0].includes('____')) {
+      result.push({ id: nextQuestionId++, text: parts[0], type: 'fill', answer: parts[1], group });
+      continue;
+    }
+
+    // 1 part → display-only fill
+    if (parts.length === 1 && parts[0]) {
+      result.push({ id: nextQuestionId++, text: parts[0], type: 'fill', group });
+      continue;
+    }
+  }
+
+  return result;
 }
 
 // ==================== Socket Handlers ====================
@@ -406,49 +553,25 @@ io.on('connection', (socket) => {
   // ---- Admin: import questions (batch, with group) ----
   socket.on('admin:import-questions', (data: { lines: string; group?: number }) => {
     const group = data.group || 1;
-    const lines = data.lines.split('\n').filter((l: string) => l.trim());
+    const rawLines = data.lines.split('\n');
+    const lines = rawLines.filter((l: string) => l.trim());
     const imported: Question[] = [];
-    let errors = 0;
+    const errorLines: { line: number; text: string; reason: string }[] = [];
 
-    for (const line of lines) {
-      const parts = line.split('|').map((s: string) => s.trim());
-      // 6 parts: text|optA|optB|optC|optD|answerLetter → choice with answer
-      if (parts.length === 6 && /^[A-D]$/i.test(parts[5])) {
-        const text = parts[0];
-        const options = parts.slice(1, 5);
-        if (text && options.every((o: string) => o)) {
-          imported.push({ id: nextQuestionId++, text, options, type: 'choice', answer: parts[5].toUpperCase(), group });
-          continue;
-        }
+    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+      const line = lines[lineIdx];
+      const parsed = parseQuestionsFromText(line, group);
+      if (parsed.length > 0) {
+        imported.push(...parsed);
+      } else {
+        // Determine reason
+        const parts = line.split('|').map((s: string) => s.trim());
+        let reason = '格式不匹配';
+        if (parts.length === 2 && !parts[0].includes('____')) reason = '填空题需包含____占位符';
+        else if (parts.length === 6 && !/^[A-D]$/i.test(parts[5])) reason = '答案须为A/B/C/D';
+        else if (parts.length > 6) reason = `分隔符|过多(${parts.length}段)`;
+        errorLines.push({ line: lineIdx + 1, text: line.substring(0, 40) + (line.length > 40 ? '...' : ''), reason });
       }
-
-      // 5 parts: text|optA|optB|optC|optD → choice (backward compat)
-      if (parts.length === 5) {
-        const text = parts[0];
-        const options = parts.slice(1, 5);
-        if (text && options.every((o: string) => o)) {
-          imported.push({ id: nextQuestionId++, text, options, type: 'choice', group });
-          continue;
-        }
-      }
-
-      // 2 parts with ____: text_with____|answer1,answer2 → fill
-      if (parts.length === 2 && parts[0].includes('____')) {
-        const text = parts[0];
-        const answer = parts[1];
-        if (text) {
-          imported.push({ id: nextQuestionId++, text, type: 'fill', answer, group });
-          continue;
-        }
-      }
-
-      // Single text → display-only fill (backward compat)
-      if (parts.length === 1 && parts[0]) {
-        imported.push({ id: nextQuestionId++, text: parts[0], type: 'fill', group });
-        continue;
-      }
-
-      errors++;
     }
 
     if (imported.length > 0) {
@@ -456,16 +579,16 @@ io.on('connection', (socket) => {
       socket.emit('admin:import-result', {
         success: true,
         count: imported.length,
-        errors,
+        errorLines,
         questions: imported,
       });
       io.emit('questions', questions);
-      console.log(`[admin] imported ${imported.length} questions (${errors} errors)`);
+      console.log(`[admin] imported ${imported.length} questions (${errorLines.length} errors)`);
     } else {
       socket.emit('admin:import-result', {
         success: false,
         count: 0,
-        errors,
+        errorLines: [{ line: 0, text: data.lines.substring(0, 40), reason: '所有行均无法解析' }],
         message: '没有有效的题目，请检查格式',
       });
     }
@@ -541,27 +664,9 @@ io.on('connection', (socket) => {
 
   // ---- Admin: reset questions to default ----
   socket.on('admin:reset-questions', () => {
-    questions.length = 0;
-    questions.push(
-      { id: 1, type: 'choice', text: '人体最大的器官是什么？', options: ['心脏', '肝脏', '皮肤', '大脑'], answer: 'C', group: 1 },
-      { id: 2, type: 'choice', text: '正常成人的静息心率范围是多少？（次/分钟）', options: ['40-60', '60-100', '100-120', '120-140'], answer: 'B', group: 1 },
-      { id: 3, type: 'choice', text: '以下哪种维生素可以通过阳光照射在皮肤中合成？', options: ['维生素A', '维生素B', '维生素C', '维生素D'], answer: 'D', group: 1 },
-      { id: 4, type: 'choice', text: '"白大褂"的发明最初是为了什么？', options: ['彰显权威', '便于清洁消毒', '区分科室', '保暖'], answer: 'B', group: 1 },
-      { id: 5, type: 'choice', text: '人体中含量最多的物质是什么？', options: ['蛋白质', '脂肪', '水', '钙'], answer: 'C', group: 1 },
-      { id: 6, type: 'choice', text: '世界卫生组织的缩写是什么？', options: ['WTO', 'WHO', 'WTF', 'WIPO'], answer: 'B', group: 1 },
-      { id: 7, type: 'choice', text: '"医者仁心"最早出自哪本古籍？', options: ['《黄帝内经》', '《本草纲目》', '《千金要方》', '《伤寒杂病论》'], answer: 'A', group: 1 },
-      { id: 8, type: 'choice', text: '护理人员"三查七对"中的"七对"不包括以下哪项？', options: ['床号', '姓名', '年龄', '药品'], answer: 'C', group: 1 },
-      { id: 9, type: 'choice', text: '医生在病历上写的"QD"是什么意思？', options: ['每天一次', '每四小时', '紧急', '停止'], answer: 'A', group: 1 },
-      { id: 10, type: 'choice', text: '以下哪个不是医院常见的科室？', options: ['内科', '外科', '天文科', '儿科'], answer: 'C', group: 1 },
-      { id: 11, type: 'choice', text: '"手术室"的无菌级别是？', options: ['Ⅰ级', 'Ⅱ级', 'Ⅲ级', 'Ⅳ级'], answer: 'A', group: 1 },
-      { id: 12, type: 'choice', text: '哪项检查被称为"医生的听诊器延伸"？', options: ['CT', 'MRI', '超声', '心电图'], answer: 'C', group: 1 },
-      { id: 13, type: 'fill', text: '医院里用于求助的紧急呼叫号码是____', answer: '120', group: 1 },
-      { id: 14, type: 'choice', text: '医学上"生命体征"不包括以下哪项？', options: ['体温', '脉搏', '体重', '血压'], answer: 'C', group: 1 },
-      { id: 15, type: 'choice', text: '"希波克拉底誓言"是哪个职业的职业道德准则？', options: ['护士', '医生', '药师', '技师'], answer: 'B', group: 1 },
-    );
-    nextQuestionId = 16;
-    socket.emit('admin:questions', questions);
-    console.log(`[admin] questions reset to defaults`);
+    loadDefaultQuestions();
+    io.emit('questions', questions);
+    console.log(`[admin] questions reset to defaults (${questions.length} questions)`);
   });
 });
 

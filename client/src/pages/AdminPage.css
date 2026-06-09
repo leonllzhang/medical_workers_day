@@ -108,6 +108,12 @@
 }
 .admin-import-result.ok { background: rgba(52,199,89,0.1); color: var(--success); border: 1px solid rgba(52,199,89,0.2); }
 .admin-import-result.fail { background: rgba(255,59,48,0.1); color: var(--danger); border: 1px solid rgba(255,59,48,0.2); }
+.import-error-detail { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.import-error-line { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 400; }
+.import-error-line + .import-error-line { border-top: 1px solid rgba(255,255,255,0.05); padding-top: 3px; }
+.err-line-num { background: rgba(255,59,48,0.15); color: var(--danger); padding: 1px 6px; border-radius: 3px; font-weight: 700; flex-shrink: 0; }
+.err-line-text { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.err-line-reason { color: var(--danger); font-size: 11px; flex-shrink: 0; }
 
 /* ====== Question List ====== */
 .admin-q-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
