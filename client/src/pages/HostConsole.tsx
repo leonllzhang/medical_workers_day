@@ -64,14 +64,14 @@ export default function HostConsole() {
     setTimeout(() => setLastAction(null), 2000)
   }
 
-  function emitJudge(correct: boolean) {
+  function emitJudge(correct: boolean, points?: number) {
     const buzzed = state?.buzzedTeam
     if (!buzzed) {
       setErrorMsg('没有抢中的队伍')
       setTimeout(() => setErrorMsg(null), 3000)
       return
     }
-    emit('host:judge', { correct, teamId: buzzed.id })
+    emit('host:judge', { correct, teamId: buzzed.id, points })
   }
 
   function updateTeam(teamId: string, name?: string, buzzerNumber?: number) {
@@ -82,7 +82,7 @@ export default function HostConsole() {
     emit('host:set-score', { teamId, score })
   }
 
-  const showBuzzedPanel = state?.mode === 'buzzed' && state.buzzedTeam
+  const showBuzzedPanel = (state?.mode === 'buzzed' && state.buzzedTeam) || (state?.mode === 'result' && state.lastResult && !state.lastResult.correct)
 
   return (
     <div className="host-container">
@@ -173,10 +173,13 @@ export default function HostConsole() {
                   ✅ 正确 (+10分)
                 </button>
                 <button className="hbtn danger" onClick={() => emitJudge(false)}>
-                  ❌ 错误 (-5分)
+                  ❌ 错误 (不扣分)
                 </button>
-                <button className="hbtn outline" onClick={() => emitJudge(true)}>
+                <button className="hbtn outline" onClick={() => emitJudge(true, 20)}>
                   ⭐ 正确 (+20分, 难题)
+                </button>
+                <button className="hbtn" style={{ background: '#f59e0b', color: 'white' }} onClick={() => emit('host:re-buzz')}>
+                  🔄 重新抢答
                 </button>
               </div>
             </section>

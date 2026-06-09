@@ -419,19 +419,32 @@ function ReadingMode({ question }: { question: Question | null }) {
   )
 }
 
-function QuizzingMode({ question }: { question: { id: number; text: string } | null }) {
+function QuizzingMode({ question }: { question: Question | null }) {
   return (
     <div className="mode-quizzing fade-in">
-      <div className="quiz-overlay-text">
-        <div className="quiz-status">🔴 抢答中</div>
-        {question && <div className="quiz-question-hint">{question.text}</div>}
-        <div className="quiz-waiting">
-          <span className="quiz-dot">.</span>
-          <span className="quiz-dot" style={{ animationDelay: '0.5s' }}>.</span>
-          <span className="quiz-dot" style={{ animationDelay: '1s' }}>.</span>
+      {question && (
+        <div className="quiz-question-card">
+          <div className="quiz-question-badge">
+            🔴 抢答中 · 第 {question.id} 题{question.type === 'fill' ? ' · 填空题' : ' · 选择题'}
+          </div>
+          <div className="quiz-question-text">{question.text}</div>
+          {question.options && (
+            <div className="quiz-options">
+              {question.options.map((opt, i) => (
+                <div key={i} className="quiz-option">
+                  <span className="quiz-option-label">{['A', 'B', 'C', 'D'][i]}</span>
+                  <span>{opt}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="quiz-waiting">
+            <span className="quiz-dot">.</span>
+            <span className="quiz-dot" style={{ animationDelay: '0.5s' }}>.</span>
+            <span className="quiz-dot" style={{ animationDelay: '1s' }}>.</span>
+          </div>
         </div>
-        <p className="quiz-hint">等待主持人启动倒计时...</p>
-      </div>
+      )}
     </div>
   )
 }

@@ -490,17 +490,26 @@ io.on('connection', (socket) => {
   socket.on('host:judge', (data: { correct: boolean; teamId: string; points?: number }) => {
     const team = state.teams.find(t => t.id === data.teamId);
     if (!team) return;
-    const points = data.points || (data.correct ? 10 : -5);
-    team.score = Math.max(0, team.score + (data.correct ? points : -Math.abs(points)));
-    state.lastResult = {
-      correct: data.correct,
-      teamId: team.id,
-      teamName: team.name,
-      points: data.correct ? points : -Math.abs(points),
-    };
+    if (data.correct) {
+      const pts = data.points || 10;
+      team.score += pts;
+      state.lastResult = { correct: true, teamId: team.id, teamName: team.name, points: pts };
+    } else {
+      state.lastResult = { correct: false, teamId: team.id, teamName: team.name, points: 0 };
+    }
     state.mode = 'result';
     broadcastState();
-    console.log(`[host] judge: ${team.name} ${data.correct ? '✓ +' : '✗ '}${points} (total: ${team.score})`);
+    console.log(`[host] judge: ${team.name} ${data.correct ? '✓ +' : '✗ 0'} (total: ${team.score})`);
+  });
+
+  // ---- Host: re-buzz (re-open question for re-buzzing after wrong answer) ----
+  socket.on('host:re-buzz', () => {
+    if (!state.currentQuestion) return;
+    state.buzzedTeam = null;
+    state.lastResult = null;
+    state.mode = 'quizzing';
+    broadcastState();
+    console.log(`[host] re-buzz for question #${state.currentQuestion.id}`);
   });
 
   // ---- Host: set team score manually ----
