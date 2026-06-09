@@ -773,7 +773,7 @@ function SettlementMode({ teams }: { teams: Team[] }) {
 function FloatingQR() {
   const hostname = window.location.hostname
   const port = window.location.port
-  const url = `${window.location.protocol}//${hostname}${port ? ':' + port : ''}/mobile`
+  const url = `${hostname}${port ? ':' + port : ''}/mobile`
   return (
     <div className="floating-qr">
       <QRCodeCanvas value={`${window.location.protocol}//${url}`} size={80} bgColor="#ffffff" fgColor="#0a0e27" />
