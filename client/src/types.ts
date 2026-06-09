@@ -63,6 +63,7 @@ export interface DrawSession {
   teamsPerRound: number[]
   animatingTeams: Team[]
   drawHistory: { teamId: string; roundIndex: number }[]
+  drawnTeamIds: string[]
 }
 
 export interface ScoreEntry {

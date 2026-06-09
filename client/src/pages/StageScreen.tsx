@@ -297,7 +297,7 @@ export default function StageScreen() {
               >
                 <span className="sb-rank">{rankEmoji(i)}</span>
                 <span className="sb-name">{t.name}</span>
-                <span className="sb-buzzer">#{t.buzzerNumber}</span>
+                <span className="sb-buzzer">组{t.round} #{t.buzzerNumber}</span>
                 <span className="sb-score" style={{ color: t.color }}>{t.score}</span>
               </div>
             ))}
@@ -307,7 +307,7 @@ export default function StageScreen() {
         {/* Center content */}
         <div className={`stage-center${drawSession?.active ? ' draw-mode' : ''}`}>
           {drawSession?.active ? (
-            <DrawCeremonyMode session={drawSession} />
+            <DrawCeremonyMode session={drawSession} onDrawTeam={() => getSocket().emit('admin:draw-team')} />
           ) : state.mode === 'waiting' ? (
             <WaitingMode />
           ) : state.mode === 'reading' ? (
@@ -526,67 +526,64 @@ function LotteryMode({ draw }: { draw: { prize: { id: string; name: string; icon
   )
 }
 
-function DrawCeremonyMode({ session }: { session: DrawSession }) {
+function DrawCeremonyMode({ session, onDrawTeam }: { session: DrawSession; onDrawTeam?: () => void }) {
   const [highlightedTeamIds, setHighlightedTeamIds] = useState<string[]>([])
+  const [revealedTeams, setRevealedTeams] = useState<string[]>([])
   const [celebrating, setCelebrating] = useState(false)
+  const [animDone, setAnimDone] = useState(false)
   const animFrameRef = useRef<number>(0)
 
-  // Marquee → reveal animation
+  // Sequential reveal animation: highlight each team → fly out → next
   useEffect(() => {
     const teams = session.animatingTeams
     if (teams.length === 0) {
-      if (highlightedTeamIds.length > 0) {
+      if (animDone) return
+      if (highlightedTeamIds.length > 0 || revealedTeams.length > 0) {
         setHighlightedTeamIds([])
+        setRevealedTeams([])
         setCelebrating(false)
+        setAnimDone(false)
       }
       return
     }
 
     setHighlightedTeamIds([])
+    setRevealedTeams([])
     setCelebrating(false)
+    setAnimDone(false)
 
-    const poolCards = session.pool
-    let marqueeCount = 0
-    const MAX_MARQUEE = 22
+    let idx = 0
 
-    // Phase 1: 走马灯 — rapidly cycle through random pool cards
-    function marqueeStep() {
-      if (marqueeCount < MAX_MARQUEE) {
-        if (poolCards.length > 0) {
-          const randomIdx = Math.floor(Math.random() * poolCards.length)
-          setHighlightedTeamIds([poolCards[randomIdx].id])
-          playDrawTickSound()
-        }
-        marqueeCount++
-        const delay = 60 + marqueeCount * 4 // gradually slow down ~60→148ms
-        animFrameRef.current = window.setTimeout(marqueeStep, delay)
-      } else {
-        // Phase 2: reveal animating teams one by one in the round panel
-        let revealIdx = 0
-        const revealed: string[] = []
-        function revealNext() {
-          if (revealIdx < teams.length) {
-            revealed.push(teams[revealIdx].id)
-            setHighlightedTeamIds([...revealed])
-            playDrawTickSound()
-            revealIdx++
-            animFrameRef.current = window.setTimeout(revealNext, 300)
-          } else {
-            setCelebrating(true)
-            playDrawRevealSound()
-            animFrameRef.current = window.setTimeout(() => setCelebrating(false), 2000)
-          }
-        }
-        try { revealNext() } catch {}
+    function processNext() {
+      if (idx >= teams.length) {
+        // All teams done — celebrate + signal server
+        setCelebrating(true)
+        setAnimDone(true)
+        playDrawRevealSound()
+        animFrameRef.current = window.setTimeout(() => {
+          getSocket().emit('draw:animation-complete')
+        }, 1000)
+        animFrameRef.current = window.setTimeout(() => setCelebrating(false), 2500)
+        return
       }
+
+      const team = teams[idx]
+      // Step 1: highlight this team in the pool
+      setHighlightedTeamIds([team.id])
+      playDrawTickSound()
+
+      // Step 2: after brief highlight, mark as revealed → triggers fly-out
+      animFrameRef.current = window.setTimeout(() => {
+        setRevealedTeams(prev => [...prev, team.id])
+        setHighlightedTeamIds([])
+        idx++
+        // Wait for fly animation (~700ms), then next team
+        animFrameRef.current = window.setTimeout(processNext, 750)
+      }, 500)
     }
 
-    if (poolCards.length > 0) {
-      marqueeStep()
-    } else {
-      // No pool cards to cycle through, reveal immediately
-      try { /* reveal */ } catch {}
-    }
+    // Small initial pause, then start
+    animFrameRef.current = window.setTimeout(processNext, 400)
 
     return () => {
       if (animFrameRef.current) {
@@ -597,100 +594,146 @@ function DrawCeremonyMode({ session }: { session: DrawSession }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.animatingTeams])
 
-  if (session.phase === 'complete') {
-    return (
-      <div className="draw-stage draw-complete fade-in">
-        <div className="draw-stage-title">🎉 抽签分组完成</div>
-        <div className="draw-rounds-grid">
-          {session.rounds.map((roundTeams, rIdx) => (
-            <div key={rIdx} className="draw-round-panel">
-              <div className="draw-round-panel-header">
-                第 {rIdx + 1} 轮 · {session.leaderLabels[rIdx]}
-              </div>
-              <div className="draw-round-panel-teams">
-                {roundTeams.map((t, tIdx) => (
-                  <div key={t.id} className="draw-round-team" style={{ borderLeftColor: t.color }}>
-                    <span className="draw-round-buzzer">#{tIdx + 1}</span>
-                    <span className="draw-round-name">{t.name}</span>
-                    <span className="draw-round-color" style={{ backgroundColor: t.color }} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  const drawnSet = new Set(session.drawnTeamIds)
+  const animatingTeamIds = new Set(session.animatingTeams.map(t => t.id))
+  const undrawnCount = session.pool.filter(t => !drawnSet.has(t.id)).length
+  const isAnimating = session.phase === 'animation'
 
-  // Pool only — never prepend animatingTeams
-  const displayTeams = session.pool
-
-  // During animation, show animatingTeams optimistically in the round panel
   const roundsToDisplay = session.rounds.map((roundTeams, rIdx) => {
-    if (rIdx === session.currentLeader && session.phase === 'animation' && session.animatingTeams.length > 0) {
+    // During animation, show animating teams in current leader's panel
+    if (rIdx === session.currentLeader && isAnimating && session.animatingTeams.length > 0) {
+      // Only show teams that have been revealed so far
+      const visibleAnimated = session.animatingTeams.filter(t => revealedTeams.includes(t.id))
+      return { roundIndex: rIdx, teams: [...roundTeams, ...visibleAnimated] }
+    }
+    // After animation done but before server broadcasts: show animating teams + rounds
+    if (rIdx === session.currentLeader && animDone && !isAnimating) {
       return { roundIndex: rIdx, teams: [...roundTeams, ...session.animatingTeams] }
     }
     return { roundIndex: rIdx, teams: roundTeams }
   })
 
+  if (session.phase === 'complete') {
+    return (
+      <div className="draw-stage fade-in draw-complete">
+        <div className="draw-header">
+          <div className="draw-complete-badge">🎉 抽签分组完成</div>
+        </div>
+        <div className="draw-panels complete">
+          {session.teamsPerRound.map((_count, rIdx) => {
+            const roundTeams = session.rounds[rIdx] || []
+            return (
+              <div key={rIdx} className="draw-panel done">
+                <div className="draw-panel-header">第 {rIdx + 1} 轮 ✓</div>
+                <div className="draw-panel-teams">
+                  {roundTeams.map((t, tIdx) => (
+                    <div key={t.id} className="draw-panel-team" style={{ color: t.color }}>
+                      <span className="draw-panel-tnum">#{tIdx + 1}</span>
+                      <span>{t.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="draw-stage fade-in">
-      <div className="draw-stage-header">
-        <div className="draw-stage-leader">
+      {/* Header */}
+      <div className="draw-header">
+        <div className="draw-leader-badge">
           👤 {session.leaderLabels[session.currentLeader]}
         </div>
-        <div className="draw-stage-subtitle">
-          正在抽选第 {session.currentLeader + 1} 轮队伍
-          <span className="draw-stage-count">剩余 {session.pool.length} 队</span>
+        <div className="draw-header-info">
+          第 {session.currentLeader + 1} 轮 · 剩余 {undrawnCount} 队
         </div>
       </div>
 
-      <div className="draw-stage-body">
-        {/* Left: pool area — marquee cycles here */}
-        <div className="draw-stage-pool">
-          <div className="draw-stage-pool-title">抽签池</div>
-          <div className="draw-stage-pool-grid">
-            {displayTeams.map(t => (
+      {/* Pool grid — ALL teams shown, drawn ones become gray + ✓ */}
+      <div className="draw-pool-area">
+        <div className="draw-pool-grid">
+          {session.pool.map(t => {
+            const isDrawn = drawnSet.has(t.id) && !animatingTeamIds.has(t.id)
+            const isAnimatingTeam = animatingTeamIds.has(t.id)
+            const isRevealed = revealedTeams.includes(t.id)
+            return (
               <div
                 key={t.id}
-                className={`draw-pool-card ${highlightedTeamIds.includes(t.id) ? 'highlighted' : ''} ${celebrating && highlightedTeamIds.includes(t.id) ? 'celebrating' : ''}`}
+                className={`draw-pool-card ${
+                  isRevealed && isAnimatingTeam ? 'flying-out' : ''
+                } ${
+                  highlightedTeamIds.includes(t.id) && !isRevealed ? 'highlighted' : ''
+                } ${
+                  isDrawn ? 'drawn' : ''
+                }`}
                 style={{ borderLeftColor: t.color }}
               >
-                <span className="draw-pool-card-name">{t.name}</span>
+                {isDrawn ? (
+                  <span className="draw-pool-drawn-marker">{t.name}</span>
+                ) : (
+                  t.name
+                )}
               </div>
-            ))}
-            {displayTeams.length === 0 && (
-              <div className="draw-pool-empty">所有队伍已抽完</div>
-            )}
-          </div>
+            )
+          })}
+          {session.pool.length === 0 && (
+            <div className="draw-pool-empty">所有队伍已抽完</div>
+          )}
         </div>
+      </div>
 
-        {/* Right: rounds panels — reveal happens here */}
-        <div className="draw-stage-rounds">
-          {roundsToDisplay.map(({ roundIndex: rIdx, teams: roundTeams }) => (
-            <div key={rIdx} className={`draw-round-panel ${rIdx === session.currentLeader ? 'active' : ''} ${rIdx < session.currentLeader ? 'done' : ''}`}>
-              <div className="draw-round-panel-header">
-                第 {rIdx + 1} 轮
-                {rIdx < session.currentLeader && <span className="draw-round-check">✓</span>}
+      {/* Draw button */}
+      {onDrawTeam && (
+        <button
+          className="draw-btn-big"
+          onClick={onDrawTeam}
+          disabled={isAnimating}
+        >
+          🎯 抽签
+        </button>
+      )}
+
+      {/* Panels area */}
+      <div className="draw-panels">
+        {session.teamsPerRound.map((_count, rIdx) => {
+          const roundData = roundsToDisplay.find(r => r.roundIndex === rIdx)
+          const roundTeams = roundData?.teams || []
+          const isActive = rIdx === session.currentLeader
+          const isDone = rIdx < session.currentLeader
+          return (
+            <div key={rIdx} className={`draw-panel ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}>
+              <div className="draw-panel-header">
+                <span>第 {rIdx + 1} 轮</span>
+                {isDone && <span className="draw-panel-check">✓</span>}
               </div>
-              <div className="draw-round-panel-teams">
-                {roundTeams.map((t, tIdx) => (
-                  <div key={t.id} className={`draw-round-team ${highlightedTeamIds.includes(t.id) ? 'highlighted' : ''} ${celebrating && highlightedTeamIds.includes(t.id) ? 'celebrating' : ''}`} style={{ borderLeftColor: t.color }}>
-                    <span className="draw-round-buzzer">#{tIdx + 1}</span>
-                    <span className="draw-round-name">{t.name}</span>
-                  </div>
-                ))}
-                {roundTeams.length === 0 && (
-                  <div className="draw-round-empty">等待抽签</div>
+              <div className="draw-panel-teams">
+                {roundTeams.map((t, tIdx) => {
+                  const justRevealed = revealedTeams.includes(t.id) && animatingTeamIds.has(t.id)
+                  return (
+                    <div
+                      key={t.id}
+                      className={`draw-panel-team ${justRevealed ? 'flying-in' : ''} ${celebrating && justRevealed ? 'celebrated' : ''}`}
+                      style={{ color: t.color }}
+                    >
+                      <span className="draw-panel-tnum">#{tIdx + 1}</span>
+                      <span>{t.name}</span>
+                    </div>
+                  )
+                })}
+                {roundTeams.length === 0 && !isDone && (
+                  <div className="draw-panel-empty">等待抽签</div>
                 )}
               </div>
             </div>
-          ))}
-        </div>
+          )
+        })}
       </div>
 
-      {/* Confetti when celebrating */}
+      {/* Confetti */}
       {celebrating && (
         <div className="draw-confetti">
           {Array.from({ length: 30 }).map((_, i) => (
@@ -706,6 +749,8 @@ function DrawCeremonyMode({ session }: { session: DrawSession }) {
     </div>
   )
 }
+
+const LOTUS_COLORS = ['#ff6b9d', '#c084fc', '#4d96ff', '#6bcb77']
 
 function SettlementMode({ teams }: { teams: Team[] }) {
   return (

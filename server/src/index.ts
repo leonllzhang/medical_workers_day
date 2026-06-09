@@ -79,6 +79,7 @@ interface DrawSession {
   teamsPerRound: number[];
   animatingTeams: Team[];
   drawHistory: { teamId: string; roundIndex: number }[];
+  drawnTeamIds: string[];
 }
 
 interface GameState {
@@ -116,7 +117,7 @@ const DEFAULT_TEAMS: Team[] = DEPT_NAMES.map((name, i) => ({
   id: `team-${i + 1}`,
   name,
   buzzerNumber: 0,
-  score: 0,
+  score: 60,
   color: COLORS_32[i],
   round: 0,
 }));
@@ -540,10 +541,10 @@ io.on('connection', (socket) => {
       state.lastResult = null;
       state.lotteryActive = false;
       state.lotteryDraw = null;
-      if (state.teams.every(t => t.score === 0)) {
-        // only reset scores if they were already zero
+      if (state.teams.every(t => t.score === 60)) {
+        // only reset scores if they were already 60
       } else {
-        state.teams.forEach(t => { t.score = 0; });
+        state.teams.forEach(t => { t.score = 60; });
       }
     }
     if (mode === 'settlement') {
@@ -586,7 +587,7 @@ io.on('connection', (socket) => {
 
   // ---- Host: reset scores ----
   socket.on('host:reset-scores', () => {
-    state.teams.forEach(t => { t.score = 0; });
+    state.teams.forEach(t => { t.score = 60; });
     broadcastState();
     console.log(`[host] scores reset`);
   });
@@ -627,11 +628,31 @@ io.on('connection', (socket) => {
       teamsPerRound,
       animatingTeams: [],
       drawHistory: [],
+      drawnTeamIds: [],
     };
 
     broadcastDrawState();
     console.log(`[draw] started: ${participating.length} teams, ${numRounds} rounds, ${teamsPerRound.join('+')} per round`);
   });
+
+  // ---- Shared: finish animation (move animating teams to rounds, advance) ----
+  function finishDrawAnimation() {
+    if (!drawSession || drawSession.phase !== 'animation') return;
+    const l = drawSession.currentLeader;
+    for (const team of drawSession.animatingTeams) {
+      drawSession.rounds[l].push(team);
+      drawSession.drawHistory.push({ teamId: team.id, roundIndex: l });
+    }
+    if (l + 1 < drawSession.totalLeaders) {
+      drawSession.currentLeader++;
+      drawSession.phase = 'drawing';
+    } else {
+      drawSession.phase = 'complete';
+    }
+    drawSession.animatingTeams = [];
+    broadcastDrawState();
+    console.log(`[draw] animation done → round ${l + 1}`);
+  }
 
   // ---- Admin: draw team (draw all teams for current round at once) ----
   socket.on('admin:draw-team', () => {
@@ -643,70 +664,55 @@ io.on('connection', (socket) => {
       socket.emit('host:error', '正在动画中，请稍候');
       return;
     }
-    if (drawSession.pool.length === 0) {
+    // Check remaining undrawn teams
+    const undrawn = drawSession.pool.filter(t => !drawSession!.drawnTeamIds.includes(t.id));
+    if (undrawn.length === 0) {
       socket.emit('host:error', '抽签池已空');
       return;
     }
 
     const leader = drawSession.currentLeader;
     const needed = drawSession.teamsPerRound[leader] - drawSession.rounds[leader].length;
-    const toDraw = Math.min(needed, drawSession.pool.length);
+    const toDraw = Math.min(needed, undrawn.length);
 
-    // Pick random teams from pool
+    // Pick random teams from pool (keep pool intact, mark as drawn)
     const picked: Team[] = [];
+    const available = [...undrawn];
     for (let i = 0; i < toDraw; i++) {
-      const randomIdx = Math.floor(Math.random() * drawSession.pool.length);
-      picked.push(drawSession.pool.splice(randomIdx, 1)[0]);
+      const randomIdx = Math.floor(Math.random() * available.length);
+      picked.push(available.splice(randomIdx, 1)[0]);
+    }
+    for (const team of picked) {
+      drawSession.drawnTeamIds.push(team.id);
     }
 
     drawSession.animatingTeams = picked;
     drawSession.phase = 'animation';
 
     broadcastDrawState();
+    console.log(`[draw] ${picked.length} teams picked, waiting for animation-complete`);
+  });
 
-    // Set 2.5-second timer for the animation
-    if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
-    drawAnimationTimer = setTimeout(() => {
-      if (!drawSession) return;
-
-      const l = drawSession.currentLeader;
-
-      // Move all picked teams to round
-      for (const team of picked) {
-        drawSession.rounds[l].push(team);
-        drawSession.drawHistory.push({ teamId: team.id, roundIndex: l });
-      }
-
-      // Auto-advance to next leader or complete
-      if (l + 1 < drawSession.totalLeaders) {
-        drawSession.currentLeader++;
-        drawSession.phase = 'drawing';
-      } else {
-        drawSession.phase = 'complete';
-      }
-
-      drawSession.animatingTeams = [];
-      broadcastDrawState();
-      console.log(`[draw] ${picked.length} teams → round ${l + 1}`);
-    }, 2500);
+  // ---- Client signals animation is done ----
+  socket.on('draw:animation-complete', () => {
+    finishDrawAnimation();
   });
 
   // ---- Admin: skip current animation ----
   socket.on('admin:draw-skip-animation', () => {
     if (!drawSession || drawSession.phase !== 'animation') return;
-    if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
-    drawSession.phase = 'drawing';
-    drawSession.animatingTeams = [];
-    broadcastDrawState();
+    finishDrawAnimation();
   });
 
   // ---- Admin: undo last draw batch (entire round) ----
   socket.on('admin:draw-undo', () => {
     if (!drawSession || !drawSession.active) return;
     if (drawSession.phase === 'animation') {
-      // Cancel current animation, return all animating teams to pool
-      if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
-      drawSession.pool.push(...drawSession.animatingTeams);
+      // Cancel current animation, return all animating teams to drawn pool
+      for (const team of drawSession.animatingTeams) {
+        const idx = drawSession.drawnTeamIds.indexOf(team.id);
+        if (idx >= 0) drawSession.drawnTeamIds.splice(idx, 1);
+      }
       drawSession.animatingTeams = [];
       drawSession.phase = 'drawing';
       broadcastDrawState();
@@ -717,12 +723,12 @@ io.on('connection', (socket) => {
     // Find the last round that has history entries
     const lastRoundIdx = drawSession.drawHistory[drawSession.drawHistory.length - 1].roundIndex;
 
-    // Remove all history entries for that round and return teams to pool
+    // Remove all history entries for that round and unmark teams
     const remaining: { teamId: string; roundIndex: number }[] = [];
     for (const entry of drawSession.drawHistory) {
       if (entry.roundIndex === lastRoundIdx) {
-        const team = drawSession.rounds[lastRoundIdx].find(t => t.id === entry.teamId);
-        if (team) drawSession.pool.push(team);
+        const didx = drawSession.drawnTeamIds.indexOf(entry.teamId);
+        if (didx >= 0) drawSession.drawnTeamIds.splice(didx, 1);
       } else {
         remaining.push(entry);
       }

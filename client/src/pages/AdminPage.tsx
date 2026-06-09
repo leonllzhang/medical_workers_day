@@ -359,7 +359,7 @@ export default function AdminPage() {
                   👤 {drawSession.leaderLabels[drawSession.currentLeader]} 抽签中
                 </div>
                 <div className="draw-pool-count">
-                  剩余 <strong>{drawSession.pool.length}</strong> 支队伍待抽
+                  剩余 <strong>{drawSession.pool.filter((t: Team) => !drawSession.drawnTeamIds.includes(t.id)).length}</strong> 支队伍待抽
                 </div>
 
                 {/* Progress cards */}
@@ -390,7 +390,7 @@ export default function AdminPage() {
                 <div className="draw-actions">
                   <button className={`draw-btn-big ${drawSession.phase === 'animation' ? 'animating' : ''}`}
                     onClick={handleDrawTeam}
-                    disabled={drawSession.phase === 'animation' || drawSession.pool.length === 0}>
+                    disabled={drawSession.phase === 'animation' || drawSession.pool.filter((t: Team) => !drawSession.drawnTeamIds.includes(t.id)).length === 0}>
                     {drawSession.phase === 'animation' ? '🎰 抽签中...' : '🎯 抽取一组'}
                   </button>
                 </div>
