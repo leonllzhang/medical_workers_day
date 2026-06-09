@@ -239,6 +239,17 @@ export default function AdminPage() {
                 <span>轮次：<strong>{distribution.length > 0 ? distribution.map(d => `第${d.round}轮 ${d.size}队`).join(' | ') : '—'}</strong></span>
               </div>
               <div className="round-config-actions">
+                <button className="admin-btn" onClick={() => {
+                  setParticipating(new Set(localTeams.map(t => t.id)))
+                }}>
+                  ✅ 全选
+                </button>
+                <button className="admin-btn" onClick={() => {
+                  setParticipating(new Set())
+                  setLocalTeams(prev => prev.map(t => ({ ...t, round: 0, buzzerNumber: 0 })))
+                }}>
+                  ❌ 取消全选
+                </button>
                 <button className="admin-btn" onClick={handleAutoAllocate} disabled={participating.size === 0}>
                   🔄 自动分配轮次
                 </button>
@@ -380,7 +391,7 @@ export default function AdminPage() {
                   <button className={`draw-btn-big ${drawSession.phase === 'animation' ? 'animating' : ''}`}
                     onClick={handleDrawTeam}
                     disabled={drawSession.phase === 'animation' || drawSession.pool.length === 0}>
-                    {drawSession.phase === 'animation' ? '🎰 抽签中...' : '🎯 抽取队伍'}
+                    {drawSession.phase === 'animation' ? '🎰 抽签中...' : '🎯 抽取一组'}
                   </button>
                 </div>
                 <div className="draw-actions">

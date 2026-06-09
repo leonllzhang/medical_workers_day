@@ -46,18 +46,12 @@ export default function HostConsole() {
     socket.on('questions', (qs: Question[]) => setQuestions(qs))
     socket.emit('host:get-questions')
 
-    // Probe video files
-    fetch('/media/videos/')
-      .then(r => r.text())
-      .then(html => {
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(html, 'text/html')
-        const links = Array.from(doc.querySelectorAll('a'))
-        const videos = links
-          .map(a => a.getAttribute('href') || '')
-          .filter(h => /\.(mp4|webm|mov|avi)$/i.test(h))
-        setVideoFiles(videos)
-        if (videos.length > 0) setSelectedVideo(videos[0])
+    // Probe video files via API
+    fetch('/api/media/videos')
+      .then(r => r.json())
+      .then(files => {
+        setVideoFiles(files)
+        if (files.length > 0) setSelectedVideo(files[0])
       })
       .catch(() => {})
 

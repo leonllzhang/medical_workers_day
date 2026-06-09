@@ -126,22 +126,28 @@ export default function StageScreen() {
   const videoFilesRef = useRef<string[]>([])
   const [currentVideo, setCurrentVideo] = useState<string>('')
   const [drawSession, setDrawSession] = useState<DrawSession | null>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const audioFilesRef = useRef<string[]>([])
+  const [currentAudio, setCurrentAudio] = useState<string>('')
+  const [audioUnlocked, setAudioUnlocked] = useState(false)
 
-  // Probe for video files in /media/videos/
+  function unlockAudio() {
+    if (audioUnlocked) return
+    setAudioUnlocked(true)
+    // Create and resume AudioContext to satisfy browser autoplay policy
+    try { const ctx = new AudioContext(); ctx.resume() } catch {}
+  }
+
+  // Probe for video and audio files
   useEffect(() => {
-    fetch('/media/videos/')
-      .then(r => r.text())
-      .then(html => {
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(html, 'text/html')
-        const links = Array.from(doc.querySelectorAll('a'))
-        const videos = links
-          .map(a => a.getAttribute('href') || '')
-          .filter(h => /\.(mp4|webm|mov|avi)$/i.test(h))
-        videoFilesRef.current = videos
-        if (videos.length > 0) setCurrentVideo(`/media/videos/${videos[0]}`)
-      })
-      .catch(() => {}) // directory listing may not be enabled
+    fetch('/api/media/videos')
+      .then(r => r.json())
+      .then(files => { videoFilesRef.current = files })
+      .catch(() => {})
+    fetch('/api/media/audio')
+      .then(r => r.json())
+      .then(files => { audioFilesRef.current = files })
+      .catch(() => {})
   }, [])
 
   function triggerBurst(type: 'correct' | 'wrong') {
@@ -174,13 +180,23 @@ export default function StageScreen() {
       if (data.mode === 'result' && data.lastResult) {
         triggerBurst(data.lastResult.correct ? 'correct' : 'wrong')
       }
-      // Play video in quizzing mode
-      if (data.mode === 'quizzing' && videoRef.current && currentVideo) {
-        videoRef.current.play().catch(() => {})
-      }
-      // Pause video when leaving quizzing mode
-      if (data.mode !== 'quizzing' && videoRef.current) {
-        videoRef.current.pause()
+      // When quizzing starts: pick random video and audio
+      if (data.mode === 'quizzing') {
+        const videos = videoFilesRef.current
+        if (videos.length > 0) {
+          setCurrentVideo(`/media/videos/${encodeURIComponent(videos[Math.floor(Math.random() * videos.length)])}`)
+        } else {
+          setCurrentVideo('')
+        }
+        const audios = audioFilesRef.current
+        if (audios.length > 0) {
+          setCurrentAudio(`/media/audio/${encodeURIComponent(audios[Math.floor(Math.random() * audios.length)])}`)
+        } else {
+          setCurrentAudio('')
+        }
+      } else {
+        // Leaving quizzing — clear audio
+        setCurrentAudio('')
       }
     })
     // Auto-advance from result back to reading mode after showing animation
@@ -196,7 +212,28 @@ export default function StageScreen() {
       socket.off('result:continue')
       socket.off('draw:state')
     }
-  }, [currentVideo])
+  }, [])
+
+  // Play/pause video and audio when quizzing mode or source changes
+  useEffect(() => {
+    if (!state || state.mode !== 'quizzing') {
+      if (videoRef.current) { videoRef.current.pause() }
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.removeAttribute('src') }
+      return
+    }
+    // Mode is quizzing — play muted video (reliable autoplay)
+    if (currentVideo && videoRef.current) {
+      videoRef.current.src = currentVideo
+      videoRef.current.currentTime = 0
+      videoRef.current.play().catch(() => {})
+    }
+    // Play audio only if unlocked by user gesture
+    if (currentAudio && audioRef.current && audioUnlocked) {
+      audioRef.current.src = currentAudio
+      audioRef.current.currentTime = 0
+      audioRef.current.play().catch(() => {})
+    }
+  }, [state?.mode, currentVideo, currentAudio, audioUnlocked])
 
   if (!state) {
     return (
@@ -231,22 +268,8 @@ export default function StageScreen() {
         </div>
       )}
 
-      {/* Background video for quizzing mode */}
-      {state.mode === 'quizzing' && currentVideo && (
-        <video
-          ref={videoRef}
-          className="bg-video"
-          src={currentVideo}
-          loop
-          muted
-          playsInline
-        />
-      )}
-      {state.mode === 'quizzing' && !currentVideo && (
-        <div className="bg-video-placeholder">
-          <div className="placeholder-pulse">🎬 请将视频文件放入 media/videos/ 目录</div>
-        </div>
-      )}
+      {/* Hidden audio element for quizzing background music */}
+      <audio ref={audioRef} loop style={{ display: 'none' }} />
 
       {/* Mode badge only */}
       <header className="stage-header">
@@ -289,7 +312,12 @@ export default function StageScreen() {
           ) : state.mode === 'reading' ? (
             <ReadingMode question={state.currentQuestion} />
           ) : state.mode === 'quizzing' ? (
-            <QuizzingMode question={state.currentQuestion} />
+            <>
+              {currentVideo && (
+                <video ref={videoRef} className="quiz-video" loop muted playsInline />
+              )}
+              <QuizzingMode question={state.currentQuestion} />
+            </>
           ) : state.mode === 'buzzed' ? (
             <BuzzedMode team={state.buzzedTeam} />
           ) : state.mode === 'result' && state.lastResult ? (
@@ -304,6 +332,13 @@ export default function StageScreen() {
 
       {/* Danmaku — positioned at bottom when quiz is active */}
       {!drawSession?.active && <DanmakuOverlay mode={state.mode} />}
+
+      {/* Audio unlock button (shown until user clicks once) */}
+      {!audioUnlocked && (
+        <div className="audio-unlock-btn" onClick={unlockAudio}>
+          🔊 点击开启音效
+        </div>
+      )}
 
       {/* Floating QR code — shown in bottom-right during quiz modes */}
       {!drawSession?.active && state.mode !== 'waiting' && state.mode !== 'settlement' && (
@@ -478,65 +513,75 @@ function LotteryMode({ draw }: { draw: { prize: { id: string; name: string; icon
 }
 
 function DrawCeremonyMode({ session }: { session: DrawSession }) {
-  const [animatingIdx, setAnimatingIdx] = useState(-1)
+  const [highlightedTeamIds, setHighlightedTeamIds] = useState<string[]>([])
   const [celebrating, setCelebrating] = useState(false)
   const animFrameRef = useRef<number>(0)
-  const prevTeamIdRef = useRef<string | undefined>(undefined)
 
-  // Slot-machine animation — triggered by animatingTeam changes
+  // Marquee → reveal animation
   useEffect(() => {
-    const currentId = session.animatingTeam?.id
-    const prevId = prevTeamIdRef.current
-    prevTeamIdRef.current = currentId
-
-    if (!currentId) {
-      if (prevId) {
-        // Animation just ended (server timer fired) — reset animation idx only
-        setAnimatingIdx(-1)
-      } else {
-        // No animation — reset all
-        setAnimatingIdx(-1)
+    const teams = session.animatingTeams
+    if (teams.length === 0) {
+      if (highlightedTeamIds.length > 0) {
+        setHighlightedTeamIds([])
         setCelebrating(false)
       }
       return
     }
 
-    // New animation — build candidate list from session props via refs
-    // (avoid putting mutable objects in deps)
-    const pool = session.pool
-    const rounds = session.rounds
-    const candidates = pool.length > 0 ? pool : rounds.flat()
-    if (candidates.length === 0) return
+    setHighlightedTeamIds([])
+    setCelebrating(false)
 
-    const totalIterations = 28
-    let iteration = 0
+    const poolCards = session.pool
+    let marqueeCount = 0
+    const MAX_MARQUEE = 22
 
-    function cycle() {
-      const randomIdx = Math.floor(Math.random() * candidates.length)
-      setAnimatingIdx(randomIdx)
-      iteration++
-      playDrawTickSound()
-
-      if (iteration < totalIterations - 6) {
-        animFrameRef.current = window.setTimeout(cycle, 55)
-      } else if (iteration < totalIterations) {
-        const delay = 55 + (iteration - (totalIterations - 6)) * 100
-        animFrameRef.current = window.setTimeout(cycle, delay)
+    // Phase 1: 走马灯 — rapidly cycle through random pool cards
+    function marqueeStep() {
+      if (marqueeCount < MAX_MARQUEE) {
+        if (poolCards.length > 0) {
+          const randomIdx = Math.floor(Math.random() * poolCards.length)
+          setHighlightedTeamIds([poolCards[randomIdx].id])
+          playDrawTickSound()
+        }
+        marqueeCount++
+        const delay = 60 + marqueeCount * 4 // gradually slow down ~60→148ms
+        animFrameRef.current = window.setTimeout(marqueeStep, delay)
       } else {
-        const finalIdx = candidates.findIndex(t => t.id === currentId!)
-        setAnimatingIdx(finalIdx >= 0 ? finalIdx : 0)
-        setCelebrating(true)
-        playDrawRevealSound()
-        setTimeout(() => setCelebrating(false), 2500)
+        // Phase 2: reveal animating teams one by one in the round panel
+        let revealIdx = 0
+        const revealed: string[] = []
+        function revealNext() {
+          if (revealIdx < teams.length) {
+            revealed.push(teams[revealIdx].id)
+            setHighlightedTeamIds([...revealed])
+            playDrawTickSound()
+            revealIdx++
+            animFrameRef.current = window.setTimeout(revealNext, 300)
+          } else {
+            setCelebrating(true)
+            playDrawRevealSound()
+            animFrameRef.current = window.setTimeout(() => setCelebrating(false), 2000)
+          }
+        }
+        try { revealNext() } catch {}
       }
     }
 
-    cycle()
+    if (poolCards.length > 0) {
+      marqueeStep()
+    } else {
+      // No pool cards to cycle through, reveal immediately
+      try { /* reveal */ } catch {}
+    }
 
     return () => {
-      if (animFrameRef.current) clearTimeout(animFrameRef.current)
+      if (animFrameRef.current) {
+        clearTimeout(animFrameRef.current)
+        animFrameRef.current = 0
+      }
     }
-  }, [session.animatingTeam?.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.animatingTeams])
 
   if (session.phase === 'complete') {
     return (
@@ -564,11 +609,16 @@ function DrawCeremonyMode({ session }: { session: DrawSession }) {
     )
   }
 
-  // Pool is the remaining teams to draw
-  const poolTeams = session.pool
-  const allPool = poolTeams.length > 0
-    ? poolTeams
-    : session.rounds.flat()
+  // Pool only — never prepend animatingTeams
+  const displayTeams = session.pool
+
+  // During animation, show animatingTeams optimistically in the round panel
+  const roundsToDisplay = session.rounds.map((roundTeams, rIdx) => {
+    if (rIdx === session.currentLeader && session.phase === 'animation' && session.animatingTeams.length > 0) {
+      return { roundIndex: rIdx, teams: [...roundTeams, ...session.animatingTeams] }
+    }
+    return { roundIndex: rIdx, teams: roundTeams }
+  })
 
   return (
     <div className="draw-stage fade-in">
@@ -583,28 +633,28 @@ function DrawCeremonyMode({ session }: { session: DrawSession }) {
       </div>
 
       <div className="draw-stage-body">
-        {/* Left: pool area with slot machine */}
+        {/* Left: pool area — marquee cycles here */}
         <div className="draw-stage-pool">
           <div className="draw-stage-pool-title">抽签池</div>
           <div className="draw-stage-pool-grid">
-            {poolTeams.map((t, i) => (
+            {displayTeams.map(t => (
               <div
                 key={t.id}
-                className={`draw-pool-card ${animatingIdx === i ? 'highlighted' : ''} ${celebrating && animatingIdx === i ? 'celebrating' : ''}`}
+                className={`draw-pool-card ${highlightedTeamIds.includes(t.id) ? 'highlighted' : ''} ${celebrating && highlightedTeamIds.includes(t.id) ? 'celebrating' : ''}`}
                 style={{ borderLeftColor: t.color }}
               >
                 <span className="draw-pool-card-name">{t.name}</span>
               </div>
             ))}
-            {poolTeams.length === 0 && (
+            {displayTeams.length === 0 && (
               <div className="draw-pool-empty">所有队伍已抽完</div>
             )}
           </div>
         </div>
 
-        {/* Right: rounds panels */}
+        {/* Right: rounds panels — reveal happens here */}
         <div className="draw-stage-rounds">
-          {session.rounds.map((roundTeams, rIdx) => (
+          {roundsToDisplay.map(({ roundIndex: rIdx, teams: roundTeams }) => (
             <div key={rIdx} className={`draw-round-panel ${rIdx === session.currentLeader ? 'active' : ''} ${rIdx < session.currentLeader ? 'done' : ''}`}>
               <div className="draw-round-panel-header">
                 第 {rIdx + 1} 轮
@@ -612,7 +662,7 @@ function DrawCeremonyMode({ session }: { session: DrawSession }) {
               </div>
               <div className="draw-round-panel-teams">
                 {roundTeams.map((t, tIdx) => (
-                  <div key={t.id} className="draw-round-team" style={{ borderLeftColor: t.color }}>
+                  <div key={t.id} className={`draw-round-team ${highlightedTeamIds.includes(t.id) ? 'highlighted' : ''} ${celebrating && highlightedTeamIds.includes(t.id) ? 'celebrating' : ''}`} style={{ borderLeftColor: t.color }}>
                     <span className="draw-round-buzzer">#{tIdx + 1}</span>
                     <span className="draw-round-name">{t.name}</span>
                   </div>

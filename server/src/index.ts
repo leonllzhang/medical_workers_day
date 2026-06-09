@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -76,7 +77,7 @@ interface DrawSession {
   totalLeaders: number;
   leaderLabels: string[];
   teamsPerRound: number[];
-  animatingTeam: Team | null;
+  animatingTeams: Team[];
   drawHistory: { teamId: string; roundIndex: number }[];
 }
 
@@ -615,7 +616,7 @@ io.on('connection', (socket) => {
       totalLeaders: numRounds,
       leaderLabels,
       teamsPerRound,
-      animatingTeam: null,
+      animatingTeams: [],
       drawHistory: [],
     };
 
@@ -623,7 +624,7 @@ io.on('connection', (socket) => {
     console.log(`[draw] started: ${participating.length} teams, ${numRounds} rounds, ${teamsPerRound.join('+')} per round`);
   });
 
-  // ---- Admin: draw team (pull one from pool) ----
+  // ---- Admin: draw team (draw all teams for current round at once) ----
   socket.on('admin:draw-team', () => {
     if (!drawSession || !drawSession.active) {
       socket.emit('host:error', '抽签未开始');
@@ -638,41 +639,47 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Randomly pick a team from pool
-    const randomIdx = Math.floor(Math.random() * drawSession.pool.length);
-    const picked = drawSession.pool.splice(randomIdx, 1)[0];
+    const leader = drawSession.currentLeader;
+    const needed = drawSession.teamsPerRound[leader] - drawSession.rounds[leader].length;
+    const toDraw = Math.min(needed, drawSession.pool.length);
 
-    drawSession.animatingTeam = picked;
+    // Pick random teams from pool
+    const picked: Team[] = [];
+    for (let i = 0; i < toDraw; i++) {
+      const randomIdx = Math.floor(Math.random() * drawSession.pool.length);
+      picked.push(drawSession.pool.splice(randomIdx, 1)[0]);
+    }
+
+    drawSession.animatingTeams = picked;
     drawSession.phase = 'animation';
 
     broadcastDrawState();
 
-    // Set 3-second timer for the animation
+    // Set 2.5-second timer for the animation
     if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
     drawAnimationTimer = setTimeout(() => {
       if (!drawSession) return;
 
-      const leader = drawSession.currentLeader;
-      drawSession.rounds[leader].push(picked);
-      drawSession.drawHistory.push({ teamId: picked.id, roundIndex: leader });
+      const l = drawSession.currentLeader;
 
-      // Check if current leader's round is full
-      if (drawSession.rounds[leader].length >= drawSession.teamsPerRound[leader]) {
-        // Move to next leader or complete
-        if (leader + 1 < drawSession.totalLeaders) {
-          drawSession.currentLeader++;
-          drawSession.phase = 'drawing';
-        } else {
-          drawSession.phase = 'complete';
-        }
-      } else {
-        drawSession.phase = 'drawing';
+      // Move all picked teams to round
+      for (const team of picked) {
+        drawSession.rounds[l].push(team);
+        drawSession.drawHistory.push({ teamId: team.id, roundIndex: l });
       }
 
-      drawSession.animatingTeam = null;
+      // Auto-advance to next leader or complete
+      if (l + 1 < drawSession.totalLeaders) {
+        drawSession.currentLeader++;
+        drawSession.phase = 'drawing';
+      } else {
+        drawSession.phase = 'complete';
+      }
+
+      drawSession.animatingTeams = [];
       broadcastDrawState();
-      console.log(`[draw] team drawn: ${picked.name} → round ${leader + 1}`);
-    }, 3000);
+      console.log(`[draw] ${picked.length} teams → round ${l + 1}`);
+    }, 2500);
   });
 
   // ---- Admin: skip current animation ----
@@ -680,34 +687,40 @@ io.on('connection', (socket) => {
     if (!drawSession || drawSession.phase !== 'animation') return;
     if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
     drawSession.phase = 'drawing';
-    drawSession.animatingTeam = null;
+    drawSession.animatingTeams = [];
     broadcastDrawState();
   });
 
-  // ---- Admin: undo last draw ----
+  // ---- Admin: undo last draw batch (entire round) ----
   socket.on('admin:draw-undo', () => {
     if (!drawSession || !drawSession.active) return;
     if (drawSession.phase === 'animation') {
-      // Cancel current animation, return team to pool
+      // Cancel current animation, return all animating teams to pool
       if (drawAnimationTimer) clearTimeout(drawAnimationTimer);
-      if (drawSession.animatingTeam) {
-        drawSession.pool.push(drawSession.animatingTeam);
-      }
-      drawSession.animatingTeam = null;
+      drawSession.pool.push(...drawSession.animatingTeams);
+      drawSession.animatingTeams = [];
       drawSession.phase = 'drawing';
       broadcastDrawState();
       return;
     }
     if (drawSession.drawHistory.length === 0) return;
 
-    const last = drawSession.drawHistory.pop()!;
-    const roundIdx = last.roundIndex;
-    const teamIdx = drawSession.rounds[roundIdx].findIndex(t => t.id === last.teamId);
-    if (teamIdx !== -1) {
-      const team = drawSession.rounds[roundIdx].splice(teamIdx, 1)[0];
-      drawSession.pool.push(team);
+    // Find the last round that has history entries
+    const lastRoundIdx = drawSession.drawHistory[drawSession.drawHistory.length - 1].roundIndex;
+
+    // Remove all history entries for that round and return teams to pool
+    const remaining: { teamId: string; roundIndex: number }[] = [];
+    for (const entry of drawSession.drawHistory) {
+      if (entry.roundIndex === lastRoundIdx) {
+        const team = drawSession.rounds[lastRoundIdx].find(t => t.id === entry.teamId);
+        if (team) drawSession.pool.push(team);
+      } else {
+        remaining.push(entry);
+      }
     }
-    drawSession.currentLeader = roundIdx;
+    drawSession.drawHistory = remaining;
+    drawSession.rounds[lastRoundIdx] = [];
+    drawSession.currentLeader = lastRoundIdx;
     drawSession.phase = 'drawing';
     broadcastDrawState();
   });
@@ -822,7 +835,12 @@ io.on('connection', (socket) => {
     state.questionIndex = -1;
     state.currentQuestion = null;
     resetForNewQuestion();
+    state.mode = 'waiting';
     broadcastState();
+    // Clear draw session so stage exits draw ceremony mode
+    if (drawAnimationTimer) { clearTimeout(drawAnimationTimer); drawAnimationTimer = null; }
+    drawSession = null;
+    io.emit('draw:state', null);
     console.log(`[admin] round config saved: ${state.totalRounds} rounds, starting round ${state.currentRound}`);
   });
 
@@ -854,6 +872,22 @@ io.on('connection', (socket) => {
 // Serve media files
 const mediaPath = path.resolve(__dirname, '../../media');
 app.use('/media', express.static(mediaPath));
+
+// API endpoints to list media files (directory listing isn't enabled by default)
+app.get('/api/media/videos', (_req, res) => {
+  try {
+    const dir = path.resolve(__dirname, '../../media/videos');
+    const files = fs.readdirSync(dir).filter(f => /\.(mp4|webm|mov|avi)$/i.test(f));
+    res.json(files);
+  } catch { res.json([]); }
+});
+app.get('/api/media/audio', (_req, res) => {
+  try {
+    const dir = path.resolve(__dirname, '../../media/audio');
+    const files = fs.readdirSync(dir).filter(f => /\.(mp3|wav|ogg|m4a)$/i.test(f));
+    res.json(files);
+  } catch { res.json([]); }
+});
 
 // In production, serve built client
 const clientDist = path.resolve(__dirname, '../../client/dist');

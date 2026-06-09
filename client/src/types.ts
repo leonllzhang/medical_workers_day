@@ -61,7 +61,7 @@ export interface DrawSession {
   totalLeaders: number
   leaderLabels: string[]
   teamsPerRound: number[]
-  animatingTeam: Team | null
+  animatingTeams: Team[]
   drawHistory: { teamId: string; roundIndex: number }[]
 }
 
