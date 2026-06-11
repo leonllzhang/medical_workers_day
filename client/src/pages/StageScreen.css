@@ -396,6 +396,66 @@
 
 /* ====== Background Video ====== */
 /* ====== Centered quiz video ====== */
+/* ====== Countdown Mode (full-screen timer) ====== */
+.mode-countdown {
+  width: 100%; height: 100%;
+  background: url('/media/images/mainbackground.png') center/cover no-repeat;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.countdown-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding-top: 80px;
+}
+.countdown-label {
+  font-size: 36px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 8px;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+.countdown-timer {
+  font-size: 160px;
+  font-weight: 900;
+  text-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 60px currentColor;
+  letter-spacing: 12px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.5s ease;
+  animation: countdownPulse 1s ease-in-out infinite;
+}
+.countdown-ready {
+  animation: none;
+  opacity: 0.9;
+}
+.countdown-timer.expired {
+  font-size: 72px;
+  animation: countdownFlash 0.5s ease-in-out 5;
+}
+.countdown-start-btn {
+  margin-top: 16px;
+  padding: 18px 48px;
+  font-size: 28px;
+  font-weight: 800;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #FEDAA5, #f5c87a);
+  color: #4a3728;
+  cursor: pointer;
+  box-shadow: 0 8px 32px rgba(254,218,165,0.3);
+  transition: all 0.3s ease;
+  letter-spacing: 2px;
+}
+.countdown-start-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(254,218,165,0.5);
+}
+
 /* ====== Opening Mode (background image + music) ====== */
 .mode-opening {
   width: 100%; height: 100%;
@@ -438,6 +498,14 @@
 @keyframes spinNote {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+@keyframes countdownPulse {
+  0%, 100% { opacity: 0.95; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+@keyframes countdownFlash {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
 @keyframes sparkleBurst {
   0% { transform: scale(0) rotate(0deg); opacity: 1; }

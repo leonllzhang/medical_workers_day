@@ -111,6 +111,10 @@ export default function HostConsole() {
               <button className="hbtn outline" onClick={() => emit(state?.mode === 'opening' ? 'host:hide-opening' : 'host:show-opening')}>
                 {state?.mode === 'opening' ? '🔙 返回' : '🎬 开幕'}
               </button>
+              <button className="hbtn outline" onClick={() => emit('host:set-mode', state?.mode === 'countdown' ? 'waiting' : 'countdown')}
+                style={{ background: state?.mode === 'countdown' ? '#ef4444' : undefined, color: 'white' }}>
+                {state?.mode === 'countdown' ? '⏱ 关闭倒计时' : '⏱ 倒计时'}
+              </button>
               <button className="hbtn primary" onClick={() => emit('host:next-question')}>
                 📖 下一题
               </button>
@@ -343,7 +347,7 @@ function modeLabel(mode: string): string {
     waiting: '等待中', reading: '读题中', quizzing: '抢答中',
     buzzed: '已抢中', result: '判定', settlement: '结算',
     lottery: '🎊 抽奖', 'round-intro': '📋 队伍入座',
-    opening: '🎬 开幕',
+    opening: '🎬 开幕', countdown: '⏱ 倒计时',
   }
   return map[mode] || mode
 }

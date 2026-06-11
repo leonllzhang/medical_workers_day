@@ -35,7 +35,7 @@ export interface LotteryDraw {
   winners: Team[]
 }
 
-export type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening'
+export type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening' | 'countdown'
 
 export interface GameStateData {
   mode: GameMode
@@ -50,6 +50,7 @@ export interface GameStateData {
   currentRound: number    // 1-4
   totalRounds: number     // total rounds in this session
   questionGroup: number   // which question group to use (= currentRound typically)
+  countdownEndTime: number // 0 = not started, timestamp when countdown ends
 }
 
 export interface DrawSession {

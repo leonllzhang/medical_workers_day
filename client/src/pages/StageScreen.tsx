@@ -254,9 +254,9 @@ export default function StageScreen() {
         </div>
       )}
 
-      {state.mode === 'opening' ? (
+      {state.mode === 'opening' || state.mode === 'countdown' ? (
         <main className="stage-content">
-          <OpeningMode />
+          {state.mode === 'opening' ? <OpeningMode /> : <CountdownMode countdownEndTime={state.countdownEndTime} />}
         </main>
       ) : (
         <>
@@ -800,13 +800,21 @@ function OpeningMode() {
       setPlaying(false)
       if (spinRef.current) { cancelAnimationFrame(spinRef.current); spinRef.current = 0 }
     } else {
-      const track = trackRef.current[trackIdxRef.current % trackRef.current.length]
-      audio.src = `/media/audio/backmusic/${encodeURIComponent(track)}`
-      audio.loop = true
-      audio.play().then(() => {
-        setPlaying(true)
-      }).catch(() => {})
+      playTrack(trackIdxRef.current)
     }
+  }
+
+  function playTrack(index: number) {
+    const audio = audioRef.current
+    if (!audio || trackRef.current.length === 0) return
+    const track = trackRef.current[index % trackRef.current.length]
+    audio.loop = false
+    audio.onended = () => {
+      trackIdxRef.current = (trackIdxRef.current + 1) % trackRef.current.length
+      playTrack(trackIdxRef.current)
+    }
+    audio.src = `/media/audio/backmusic/${encodeURIComponent(track)}`
+    audio.play().then(() => setPlaying(true)).catch(() => {})
   }
 
   return (
@@ -817,6 +825,117 @@ function OpeningMode() {
         title={playing ? '暂停背景音乐' : '播放背景音乐'}>
         ♪
       </button>
+    </div>
+  )
+}
+
+function CountdownMode({ countdownEndTime }: { countdownEndTime: number }) {
+  const [remaining, setRemaining] = useState(countdownEndTime > 0 ? Math.max(0, Math.floor((countdownEndTime - Date.now()) / 1000)) : 0)
+  const [started, setStarted] = useState(countdownEndTime > 0)
+  const [expired, setExpired] = useState(false)
+  const endTimeRef = useRef(countdownEndTime)
+  const timerRef = useRef<ReturnType<typeof setInterval>>(0)
+  // Music state
+  const [playing, setPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const trackRef = useRef<string[]>([])
+
+  // Fetch music files
+  useEffect(() => {
+    fetch('/api/media/audio/backmusic')
+      .then(r => r.json())
+      .then(files => { trackRef.current = files })
+      .catch(() => {})
+  }, [])
+
+  // Sync endTime when server broadcasts (e.g. another client started it)
+  useEffect(() => {
+    if (countdownEndTime > 0) {
+      endTimeRef.current = countdownEndTime
+      setStarted(true)
+    }
+  }, [countdownEndTime])
+
+  // Tick every second
+  useEffect(() => {
+    if (!started) return
+    function tick() {
+      const diff = Math.max(0, Math.floor((endTimeRef.current - Date.now()) / 1000))
+      setRemaining(diff)
+      if (diff <= 0) { setExpired(true); clearInterval(timerRef.current) }
+    }
+    tick()
+    timerRef.current = setInterval(tick, 1000)
+    return () => clearInterval(timerRef.current)
+  }, [started])
+
+  function handleStart() {
+    getSocket().emit('host:start-countdown')
+    // Set end time locally so countdown starts immediately (no wait for server)
+    endTimeRef.current = Date.now() + 20 * 60 * 1000
+    setStarted(true)
+    setRemaining(20 * 60)
+  }
+
+  const cIdxRef = useRef(0)
+  function toggleMusic() {
+    const audio = audioRef.current
+    if (!audio || trackRef.current.length === 0) return
+    if (playing) {
+      audio.pause()
+      setPlaying(false)
+    } else {
+      playCtrack(cIdxRef.current)
+    }
+  }
+  function playCtrack(index: number) {
+    const audio = audioRef.current
+    if (!audio || trackRef.current.length === 0) return
+    const track = trackRef.current[index % trackRef.current.length]
+    audio.loop = false
+    audio.onended = () => {
+      cIdxRef.current = (cIdxRef.current + 1) % trackRef.current.length
+      playCtrack(cIdxRef.current)
+    }
+    audio.src = `/media/audio/backmusic/${encodeURIComponent(track)}`
+    audio.play().then(() => setPlaying(true)).catch(() => {})
+  }
+
+  const minutes = Math.floor(remaining / 60)
+  const seconds = remaining % 60
+  const display = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+
+  // Color transitions: golden #FEDAA5 > 10min, then warm amber > 5min, red <= 1min
+  let color = '#FEDAA5'
+  if (started) {
+    if (remaining <= 60) color = '#ef4444'
+    else if (remaining <= 300) color = '#f59e0b'
+    else if (remaining <= 600) color = '#eab308'
+  }
+
+  return (
+    <div className="mode-countdown">
+      <audio ref={audioRef} />
+      <button className={`opening-music-btn ${playing ? 'playing' : ''}`}
+        onClick={toggleMusic}
+        title={playing ? '暂停背景音乐' : '播放背景音乐'}>
+        ♪
+      </button>
+      <div className="countdown-center">
+        <div className="countdown-label">倒计时</div>
+        {started ? (
+          <div className={`countdown-timer ${expired ? 'expired' : ''}`} style={{ color }}>
+            {expired ? '⏰ 时间到！' : display}
+          </div>
+        ) : (
+          <div className="countdown-timer countdown-ready" style={{ color: '#FEDAA5' }}>20:00</div>
+        )}
+        {!started && (
+          <button className="countdown-start-btn" onClick={handleStart}>
+            ▶ 开始 20 分钟倒计时
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -886,6 +1005,7 @@ function modeLabel(mode: string): string {
     opening: '🎬 开幕', waiting: '等待中', reading: '读题中', quizzing: '抢答中',
     buzzed: '已抢中', result: '判定', settlement: '结算',
     lottery: '🎊 抽奖中', 'round-intro': '📋 队伍入座',
+    countdown: '⏱ 倒计时',
   }
   return map[mode] || mode
 }

@@ -47,7 +47,7 @@ interface Danmaku {
   timestamp: number;
 }
 
-type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening';
+type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening' | 'countdown';
 
 interface LastResult {
   correct: boolean;
@@ -95,6 +95,7 @@ interface GameState {
   currentRound: number;        // 1-4
   totalRounds: number;         // calculated from round config
   questionGroup: number;       // which question group (= currentRound typically)
+  countdownEndTime: number;    // 0 = not started, otherwise timestamp when countdown ends
 }
 
 // ==================== Default Teams (buzzer 1-10) ====================
@@ -136,7 +137,7 @@ const DEFAULT_QUESTIONS_TEXT = `
 不属于医疗核心制度的是：____|A.首诊负责制|B.三级医生查房制|C.医院感染管理制度
 手术记录应当在术后 ____ 内完成。|A.6 小时|B.12 小时|C.24 小时|D.三天
 科内会诊原则上应 ____, 全科人员参加。主要对本科的疑难病例、危重病例、手术病例、出现严重并发症病例或具有科研教学价值的病例等进行全科会诊。|A.每周举行两次|B.每周举行一次|C.每两周举行一次|D.每月举行一次
-填空题：第一次接诊的医师或科室为首诊医师和首诊科室，首诊医师对患者的____、____、____、____、____等工作负责。
+填空题：第一次接诊的医师或科室为首诊医师和首诊科室，首诊医师对患者的____、____、____、____、____和____等工作负责。
 填空题：首诊医师必须详细询问病史，进行体格检查、必要的辅助检查和处理，并认真记录什么文书？____
 填空题：首诊医师下班前，应将患者移交接班医师，把患者的病情及需注意的事项交待清楚，并认真做好什么记录。____
 填空题：危重症患者如需检查、住院或转院者，首诊医师应怎样做？____
@@ -268,6 +269,7 @@ let state: GameState = {
   currentRound: 0,
   totalRounds: 0,
   questionGroup: 1,
+  countdownEndTime: 0,
 };
 
 const danmakuQueue: Danmaku[] = [];
@@ -307,6 +309,7 @@ function broadcastState() {
     currentRound: state.currentRound,
     totalRounds: state.totalRounds,
     questionGroup: state.questionGroup,
+    countdownEndTime: state.countdownEndTime,
   });
 }
 
@@ -403,6 +406,7 @@ io.on('connection', (socket) => {
     currentRound: state.currentRound,
     totalRounds: state.totalRounds,
     questionGroup: state.questionGroup,
+    countdownEndTime: state.countdownEndTime,
   });
 
   // Send questions to newly connected client
@@ -551,8 +555,22 @@ io.on('connection', (socket) => {
       state.buzzedTeam = null;
       state.lastResult = null;
     }
+    if (mode === 'countdown') {
+      state.countdownEndTime = 0;  // reset, waiting to start
+    }
     broadcastState();
     console.log(`[host] set mode: ${mode}`);
+  });
+
+  // ---- Host: start countdown ----
+  socket.on('host:start-countdown', () => {
+    if (state.mode !== 'countdown') {
+      socket.emit('host:error', '当前不在倒计时模式');
+      return;
+    }
+    state.countdownEndTime = Date.now() + 20 * 60 * 1000;  // 20 minutes from now
+    broadcastState();
+    console.log(`[host] countdown started, ends at ${new Date(state.countdownEndTime).toLocaleTimeString()}`);
   });
 
   // ---- Host: lottery draw ----
