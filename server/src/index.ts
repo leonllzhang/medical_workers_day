@@ -47,7 +47,7 @@ interface Danmaku {
   timestamp: number;
 }
 
-type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro';
+type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening';
 
 interface LastResult {
   correct: boolean;
@@ -256,8 +256,8 @@ const PRIZES: Prize[] = [
 
 // ==================== State ====================
 let state: GameState = {
-  mode: 'waiting',
-  previousMode: 'waiting',
+  mode: 'opening',
+  previousMode: 'opening',
   currentQuestion: null,
   questionIndex: -1,
   teams: DEFAULT_TEAMS.map(t => ({ ...t })),
@@ -583,6 +583,21 @@ io.on('connection', (socket) => {
     state.mode = state.previousMode;
     broadcastState();
     console.log(`[host] lottery ended, restored: ${state.mode}`);
+  });
+
+  // ---- Host: show opening (save previous mode) ----
+  socket.on('host:show-opening', () => {
+    state.previousMode = state.mode;
+    state.mode = 'opening';
+    broadcastState();
+    console.log(`[host] show opening, previous: ${state.previousMode}`);
+  });
+
+  // ---- Host: hide opening (restore previous mode) ----
+  socket.on('host:hide-opening', () => {
+    state.mode = state.previousMode;
+    broadcastState();
+    console.log(`[host] hide opening, restored: ${state.mode}`);
   });
 
   // ---- Host: reset scores ----

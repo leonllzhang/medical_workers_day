@@ -108,6 +108,9 @@ export default function HostConsole() {
           <section className="host-card">
             <h2>🎬 流程控制</h2>
             <div className="flow-buttons">
+              <button className="hbtn outline" onClick={() => emit(state?.mode === 'opening' ? 'host:hide-opening' : 'host:show-opening')}>
+                {state?.mode === 'opening' ? '🔙 返回' : '🎬 开幕'}
+              </button>
               <button className="hbtn primary" onClick={() => emit('host:next-question')}>
                 📖 下一题
               </button>
@@ -127,6 +130,12 @@ export default function HostConsole() {
                 <button className="hbtn" style={{ background: '#f59e0b', color: 'white' }}
                   onClick={() => emit('host:next-round')}>
                   ➡️ 下一轮 (第{state.currentRound + 1}轮)
+                </button>
+              )}
+              {state?.mode === 'opening' && (
+                <button className="hbtn primary" onClick={() => emit('host:set-mode', 'waiting')}
+                  style={{ width: '100%', fontSize: 20, padding: '12px 24px' }}>
+                  🎬 开始比赛
                 </button>
               )}
               <button className="hbtn outline" onClick={() => emit('host:set-mode', 'waiting')}>
@@ -334,6 +343,7 @@ function modeLabel(mode: string): string {
     waiting: '等待中', reading: '读题中', quizzing: '抢答中',
     buzzed: '已抢中', result: '判定', settlement: '结算',
     lottery: '🎊 抽奖', 'round-intro': '📋 队伍入座',
+    opening: '🎬 开幕',
   }
   return map[mode] || mode
 }

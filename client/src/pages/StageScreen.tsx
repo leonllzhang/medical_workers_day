@@ -254,78 +254,86 @@ export default function StageScreen() {
         </div>
       )}
 
-      {/* Hidden audio element for quizzing background music */}
-      <audio ref={audioRef} loop style={{ display: 'none' }} />
+      {state.mode === 'opening' ? (
+        <main className="stage-content">
+          <OpeningMode />
+        </main>
+      ) : (
+        <>
+          {/* Hidden audio element for quizzing background music */}
+          <audio ref={audioRef} loop style={{ display: 'none' }} />
 
-      {/* Mode badge only */}
-      <header className="stage-header">
-        <span />
-        {!drawSession?.active && (
-          <div className="stage-mode-badge">
-            {state.totalRounds > 0 && <span className="round-badge">第{state.currentRound}/{state.totalRounds}轮</span>}
-            {modeLabel(state.mode)}
-          </div>
-        )}
-      </header>
-
-      {/* Main content area */}
-      <main className={`stage-content ${state.mode === 'quizzing' ? 'quizzing-mode' : ''}`}>
-        {/* Scoreboard — always visible as side panel */}
-        <div className="scoreboard-panel">
-          <h3 className="scoreboard-title">🏆 积分榜</h3>
-          <div className="scoreboard-list">
-            {sortedTeams.map((t, i) => (
-              <div
-                key={t.id}
-                className={`scoreboard-item ${state.buzzedTeam?.id === t.id ? 'highlighted' : ''}`}
-                style={{ borderLeftColor: t.color }}
-              >
-                <span className="sb-rank">{rankEmoji(i)}</span>
-                <span className="sb-name">{t.name}</span>
-                <span className="sb-buzzer">组{t.round} #{t.buzzerNumber}</span>
-                <span className="sb-score" style={{ color: t.color }}>{t.score}</span>
+          {/* Mode badge only */}
+          <header className="stage-header">
+            <span />
+            {!drawSession?.active && (
+              <div className="stage-mode-badge">
+                {state.totalRounds > 0 && <span className="round-badge">第{state.currentRound}/{state.totalRounds}轮</span>}
+                {modeLabel(state.mode)}
               </div>
-            ))}
-          </div>
-        </div>
+            )}
+          </header>
 
-        {/* Center content */}
-        <div className={`stage-center${drawSession?.active ? ' draw-mode' : ''}`}>
-          {drawSession?.active ? (
-            <DrawCeremonyMode session={drawSession} onDrawTeam={() => getSocket().emit('admin:draw-team')} />
-          ) : state.mode === 'waiting' ? (
-            <WaitingMode />
-          ) : state.mode === 'reading' ? (
-            <ReadingMode question={state.currentQuestion} />
-          ) : state.mode === 'quizzing' ? (
-            <QuizzingMode question={state.currentQuestion} />
-          ) : state.mode === 'buzzed' ? (
-            <BuzzedMode team={state.buzzedTeam} question={state.currentQuestion} />
-          ) : state.mode === 'result' && state.lastResult ? (
-            <ResultMode result={state.lastResult} />
-          ) : state.mode === 'lottery' && state.lotteryDraw ? (
-            <LotteryMode draw={state.lotteryDraw} />
-          ) : state.mode === 'round-intro' ? (
-            <RoundIntroMode teams={state.teams} round={state.currentRound} />
-          ) : state.mode === 'settlement' ? (
-            <SettlementMode teams={sortedTeams} />
-          ) : null}
-        </div>
-      </main>
+          {/* Main content area */}
+          <main className={`stage-content ${state.mode === 'quizzing' ? 'quizzing-mode' : ''}`}>
+            {/* Scoreboard — always visible as side panel */}
+            <div className="scoreboard-panel">
+              <h3 className="scoreboard-title">🏆 积分榜</h3>
+              <div className="scoreboard-list">
+                {sortedTeams.map((t, i) => (
+                  <div
+                    key={t.id}
+                    className={`scoreboard-item ${state.buzzedTeam?.id === t.id ? 'highlighted' : ''}`}
+                    style={{ borderLeftColor: t.color }}
+                  >
+                    <span className="sb-rank">{rankEmoji(i)}</span>
+                    <span className="sb-name">{t.name}</span>
+                    <span className="sb-buzzer">组{t.round} #{t.buzzerNumber}</span>
+                    <span className="sb-score" style={{ color: t.color }}>{t.score}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-      {/* Danmaku — positioned at bottom when quiz is active */}
-      {!drawSession?.active && <DanmakuOverlay mode={state.mode} />}
+            {/* Center content */}
+            <div className={`stage-center${drawSession?.active ? ' draw-mode' : ''}`}>
+              {drawSession?.active ? (
+                <DrawCeremonyMode session={drawSession} onDrawTeam={() => getSocket().emit('admin:draw-team')} />
+              ) : state.mode === 'waiting' ? (
+                <WaitingMode />
+              ) : state.mode === 'reading' ? (
+                <ReadingMode question={state.currentQuestion} />
+              ) : state.mode === 'quizzing' ? (
+                <QuizzingMode question={state.currentQuestion} />
+              ) : state.mode === 'buzzed' ? (
+                <BuzzedMode team={state.buzzedTeam} question={state.currentQuestion} />
+              ) : state.mode === 'result' && state.lastResult ? (
+                <ResultMode result={state.lastResult} />
+              ) : state.mode === 'lottery' && state.lotteryDraw ? (
+                <LotteryMode draw={state.lotteryDraw} />
+              ) : state.mode === 'round-intro' ? (
+                <RoundIntroMode teams={state.teams} round={state.currentRound} />
+              ) : state.mode === 'settlement' ? (
+                <SettlementMode teams={sortedTeams} />
+              ) : null}
+            </div>
+          </main>
 
-      {/* Audio unlock button (shown until user clicks once) */}
-      {!audioUnlocked && (
-        <div className="audio-unlock-btn" onClick={unlockAudio}>
-          🔊 点击开启音效
-        </div>
-      )}
+          {/* Danmaku — positioned at bottom when quiz is active */}
+          {!drawSession?.active && <DanmakuOverlay mode={state.mode} />}
 
-      {/* Floating QR code — shown in bottom-right during quiz modes */}
-      {!drawSession?.active && state.mode !== 'waiting' && state.mode !== 'settlement' && (
-        <FloatingQR />
+          {/* Audio unlock button (shown until user clicks once) */}
+          {!audioUnlocked && (
+            <div className="audio-unlock-btn" onClick={unlockAudio}>
+              🔊 点击开启音效
+            </div>
+          )}
+
+          {/* Floating QR code — shown in bottom-right during quiz modes */}
+          {!drawSession?.active && state.mode !== 'waiting' && state.mode !== 'settlement' && (
+            <FloatingQR />
+          )}
+        </>
       )}
     </div>
   )
@@ -766,6 +774,69 @@ function DrawCeremonyMode({ session, onDrawTeam }: { session: DrawSession; onDra
   )
 }
 
+function OpeningMode() {
+  const [audioFiles, setAudioFiles] = useState<string[]>([])
+  const [currentTrack, setCurrentTrack] = useState('')
+  const [playing, setPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement>(null)
+
+  useEffect(() => {
+    fetch('/api/media/audio')
+      .then(r => r.json())
+      .then(files => {
+        setAudioFiles(files)
+        if (files.length > 0) setCurrentTrack(files[0])
+      })
+      .catch(() => {})
+  }, [])
+
+  function togglePlay() {
+    const audio = audioRef.current
+    if (!audio || !currentTrack) return
+    if (playing) {
+      audio.pause()
+      setPlaying(false)
+    } else {
+      audio.src = `/media/audio/${encodeURIComponent(currentTrack)}`
+      audio.play().then(() => setPlaying(true)).catch(() => {})
+    }
+  }
+
+  function onTrackChange(track: string) {
+    setCurrentTrack(track)
+    if (playing && audioRef.current) {
+      audioRef.current.src = `/media/audio/${encodeURIComponent(track)}`
+      audioRef.current.play().catch(() => {})
+    }
+  }
+
+  return (
+    <div className="mode-opening">
+      <audio ref={audioRef} loop />
+      <div className="opening-music-panel">
+        <div className="opening-music-header">
+          <span className="opening-music-icon">{playing ? '🔊' : '🔇'}</span>
+          <span className="opening-music-label">背景音乐</span>
+        </div>
+        <div className="opening-music-controls">
+          <select
+            className="opening-music-select"
+            value={currentTrack}
+            onChange={e => onTrackChange(e.target.value)}
+          >
+            {audioFiles.map(f => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+          <button className="opening-music-btn" onClick={togglePlay} title={playing ? '暂停' : '播放'}>
+            {playing ? '⏸️' : '▶️'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const LOTUS_COLORS = ['#ff6b9d', '#c084fc', '#4d96ff', '#6bcb77']
 
 function SettlementMode({ teams }: { teams: Team[] }) {
@@ -804,7 +875,7 @@ function FloatingQR() {
 
 function modeLabel(mode: string): string {
   const map: Record<string, string> = {
-    waiting: '等待中', reading: '读题中', quizzing: '抢答中',
+    opening: '🎬 开幕', waiting: '等待中', reading: '读题中', quizzing: '抢答中',
     buzzed: '已抢中', result: '判定', settlement: '结算',
     lottery: '🎊 抽奖中', 'round-intro': '📋 队伍入座',
   }
