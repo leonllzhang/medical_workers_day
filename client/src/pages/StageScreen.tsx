@@ -775,64 +775,48 @@ function DrawCeremonyMode({ session, onDrawTeam }: { session: DrawSession; onDra
 }
 
 function OpeningMode() {
-  const [audioFiles, setAudioFiles] = useState<string[]>([])
-  const [currentTrack, setCurrentTrack] = useState('')
+  const [audioReady, setAudioReady] = useState(false)
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const trackRef = useRef<string[]>([])
+  const trackIdxRef = useRef(0)
+  const spinRef = useRef<number>(0)
 
   useEffect(() => {
-    fetch('/api/media/audio')
+    fetch('/api/media/audio/backmusic')
       .then(r => r.json())
       .then(files => {
-        setAudioFiles(files)
-        if (files.length > 0) setCurrentTrack(files[0])
+        trackRef.current = files
+        setAudioReady(files.length > 0)
       })
       .catch(() => {})
   }, [])
 
   function togglePlay() {
     const audio = audioRef.current
-    if (!audio || !currentTrack) return
+    if (!audio || trackRef.current.length === 0) return
     if (playing) {
       audio.pause()
       setPlaying(false)
+      if (spinRef.current) { cancelAnimationFrame(spinRef.current); spinRef.current = 0 }
     } else {
-      audio.src = `/media/audio/${encodeURIComponent(currentTrack)}`
-      audio.play().then(() => setPlaying(true)).catch(() => {})
-    }
-  }
-
-  function onTrackChange(track: string) {
-    setCurrentTrack(track)
-    if (playing && audioRef.current) {
-      audioRef.current.src = `/media/audio/${encodeURIComponent(track)}`
-      audioRef.current.play().catch(() => {})
+      const track = trackRef.current[trackIdxRef.current % trackRef.current.length]
+      audio.src = `/media/audio/backmusic/${encodeURIComponent(track)}`
+      audio.loop = true
+      audio.play().then(() => {
+        setPlaying(true)
+      }).catch(() => {})
     }
   }
 
   return (
     <div className="mode-opening">
-      <audio ref={audioRef} loop />
-      <div className="opening-music-panel">
-        <div className="opening-music-header">
-          <span className="opening-music-icon">{playing ? '🔊' : '🔇'}</span>
-          <span className="opening-music-label">背景音乐</span>
-        </div>
-        <div className="opening-music-controls">
-          <select
-            className="opening-music-select"
-            value={currentTrack}
-            onChange={e => onTrackChange(e.target.value)}
-          >
-            {audioFiles.map(f => (
-              <option key={f} value={f}>{f}</option>
-            ))}
-          </select>
-          <button className="opening-music-btn" onClick={togglePlay} title={playing ? '暂停' : '播放'}>
-            {playing ? '⏸️' : '▶️'}
-          </button>
-        </div>
-      </div>
+      <audio ref={audioRef} />
+      <button className={`opening-music-btn ${playing ? 'playing' : ''}`}
+        onClick={togglePlay}
+        title={playing ? '暂停背景音乐' : '播放背景音乐'}>
+        ♪
+      </button>
     </div>
   )
 }

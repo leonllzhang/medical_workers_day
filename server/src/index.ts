@@ -918,6 +918,13 @@ app.get('/api/media/audio', (_req, res) => {
     res.json(files);
   } catch { res.json([]); }
 });
+app.get('/api/media/audio/backmusic', (_req, res) => {
+  try {
+    const dir = path.resolve(__dirname, '../../media/audio/backmusic');
+    const files = fs.readdirSync(dir).filter(f => /\.(mp3|wav|ogg|m4a)$/i.test(f));
+    res.json(files);
+  } catch { res.json([]); }
+});
 
 // In production, serve built client
 const clientDist = path.resolve(__dirname, '../../client/dist');
