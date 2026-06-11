@@ -118,7 +118,12 @@ export default function HostConsole() {
               <button className="hbtn gold" onClick={() => emit('host:set-mode', 'settlement')}>
                 🏆 结算
               </button>
-              {state && state.currentRound < state.totalRounds && (
+              {state?.mode === 'round-intro' ? (
+                <button className="hbtn primary" onClick={() => emit('host:set-mode', 'waiting')}
+                  style={{ width: '100%', fontSize: 20, padding: '12px 24px' }}>
+                  🎬 开始本轮比赛
+                </button>
+              ) : state && state.currentRound < state.totalRounds && (
                 <button className="hbtn" style={{ background: '#f59e0b', color: 'white' }}
                   onClick={() => emit('host:next-round')}>
                   ➡️ 下一轮 (第{state.currentRound + 1}轮)
@@ -328,7 +333,7 @@ function modeLabel(mode: string): string {
   const map: Record<string, string> = {
     waiting: '等待中', reading: '读题中', quizzing: '抢答中',
     buzzed: '已抢中', result: '判定', settlement: '结算',
-    lottery: '🎊 抽奖',
+    lottery: '🎊 抽奖', 'round-intro': '📋 队伍入座',
   }
   return map[mode] || mode
 }

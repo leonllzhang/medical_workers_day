@@ -47,7 +47,7 @@ interface Danmaku {
   timestamp: number;
 }
 
-type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery';
+type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro';
 
 interface LastResult {
   correct: boolean;
@@ -850,7 +850,7 @@ io.on('connection', (socket) => {
     state.questionIndex = -1;
     state.currentQuestion = null;
     resetForNewQuestion();
-    state.mode = 'waiting';
+    state.mode = 'round-intro';
     broadcastState();
     // Clear draw session so stage exits draw ceremony mode
     if (drawAnimationTimer) { clearTimeout(drawAnimationTimer); drawAnimationTimer = null; }
@@ -870,7 +870,7 @@ io.on('connection', (socket) => {
     state.questionIndex = -1;
     state.currentQuestion = null;
     resetForNewQuestion();
-    state.mode = 'waiting';
+    state.mode = 'round-intro';
     broadcastState();
     console.log(`[host] → round ${state.currentRound}/${state.totalRounds}`);
   });

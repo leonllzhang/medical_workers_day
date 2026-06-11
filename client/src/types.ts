@@ -35,7 +35,7 @@ export interface LotteryDraw {
   winners: Team[]
 }
 
-export type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery'
+export type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro'
 
 export interface GameStateData {
   mode: GameMode

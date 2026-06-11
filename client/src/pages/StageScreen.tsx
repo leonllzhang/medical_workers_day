@@ -305,6 +305,8 @@ export default function StageScreen() {
             <ResultMode result={state.lastResult} />
           ) : state.mode === 'lottery' && state.lotteryDraw ? (
             <LotteryMode draw={state.lotteryDraw} />
+          ) : state.mode === 'round-intro' ? (
+            <RoundIntroMode teams={state.teams} round={state.currentRound} />
           ) : state.mode === 'settlement' ? (
             <SettlementMode teams={sortedTeams} />
           ) : null}
@@ -475,6 +477,24 @@ function ResultMode({ result }: { result: { correct: boolean; teamId: string; te
         <div className="result-points">
           {result.points > 0 ? `+${result.points} 分` : '不加分'}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function RoundIntroMode({ teams, round }: { teams: Team[]; round: number }) {
+  const roundTeams = teams.filter(t => t.round === round).sort((a, b) => a.buzzerNumber - b.buzzerNumber)
+  return (
+    <div className="mode-round-intro fade-in">
+      <h2 className="intro-round-title">📋 第 {round} 轮 — 队伍入座</h2>
+      <p className="intro-round-hint">请以下队伍按对应号码就座抢答器</p>
+      <div className="intro-buzzer-grid">
+        {roundTeams.map(t => (
+          <div key={t.id} className="intro-buzzer-card" style={{ borderColor: t.color }}>
+            <div className="intro-buzzer-num" style={{ backgroundColor: t.color }}>#{t.buzzerNumber}</div>
+            <div className="intro-team-name" style={{ color: t.color }}>{t.name}</div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -786,7 +806,7 @@ function modeLabel(mode: string): string {
   const map: Record<string, string> = {
     waiting: '等待中', reading: '读题中', quizzing: '抢答中',
     buzzed: '已抢中', result: '判定', settlement: '结算',
-    lottery: '🎊 抽奖中',
+    lottery: '🎊 抽奖中', 'round-intro': '📋 队伍入座',
   }
   return map[mode] || mode
 }
