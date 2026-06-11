@@ -35,7 +35,32 @@ export interface LotteryDraw {
   winners: Team[]
 }
 
-export type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening' | 'countdown'
+export interface CheckInPerson {
+  id: string
+  name: string
+  department: string
+  timestamp: number
+}
+
+export interface LotteryV2RoundData {
+  roundNumber: number
+  winners: CheckInPerson[]
+  absentIds: string[]
+  completed: boolean
+}
+
+export interface LotteryV2State {
+  active: boolean
+  currentRound: number
+  phase: 'idle' | 'ready' | 'animating' | 'revealed' | 'all-complete'
+  currentWinners: CheckInPerson[]
+  pool: CheckInPerson[]
+  allCheckInNames: string[]
+  roundResults: Record<number, LotteryV2RoundData | null>
+  allWinnerIds: string[]
+}
+
+export type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening' | 'countdown' | 'lottery-v2'
 
 export interface GameStateData {
   mode: GameMode

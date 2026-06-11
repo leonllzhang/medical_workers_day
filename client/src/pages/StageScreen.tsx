@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { getSocket } from '../socket'
 import DanmakuOverlay from '../components/DanmakuOverlay'
 import { QRCodeCanvas } from 'qrcode.react'
-import type { GameStateData, Team, Question, DrawSession } from '../types'
+import type { GameStateData, Team, Question, DrawSession, LotteryV2State as LV2State } from '../types'
 import './StageScreen.css'
 
 const MOBILE_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}/mobile`
@@ -124,6 +124,7 @@ export default function StageScreen() {
   const sparkleIdRef = useRef(0)
   const videoFilesRef = useRef<string[]>([])
   const [drawSession, setDrawSession] = useState<DrawSession | null>(null)
+  const [lotteryV2State, setLotteryV2State] = useState<LV2State | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const audioFilesRef = useRef<string[]>([])
   const [currentAudio, setCurrentAudio] = useState<string>('')
@@ -198,6 +199,12 @@ export default function StageScreen() {
     })
     socket.on('draw:state', (ds: DrawSession | null) => {
       setDrawSession(ds)
+    })
+    socket.on('lottery-v2:state', (lv: LV2State | null) => {
+      setLotteryV2State(lv)
+      if (lv?.phase === 'animating') {
+        playLotterySound()
+      }
     })
     return () => {
       socket.off('game:state')
@@ -315,6 +322,8 @@ export default function StageScreen() {
                 <RoundIntroMode teams={state.teams} round={state.currentRound} />
               ) : state.mode === 'settlement' ? (
                 <SettlementMode teams={sortedTeams} />
+              ) : state.mode === 'lottery-v2' && lotteryV2State ? (
+                <LotteryV2Mode lvState={lotteryV2State} />
               ) : null}
             </div>
           </main>
@@ -825,6 +834,10 @@ function OpeningMode() {
         title={playing ? '暂停背景音乐' : '播放背景音乐'}>
         ♪
       </button>
+      <div className="opening-checkin-qr">
+        <QRCodeCanvas value={`${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/checkin`} size={120} bgColor="#ffffff" fgColor="#0a0e27" />
+        <span className="opening-checkin-label">📋 扫码签到</span>
+      </div>
     </div>
   )
 }
@@ -1033,6 +1046,201 @@ function SettlementMode({ teams }: { teams: Team[] }) {
   )
 }
 
+// ===================== Lottery V2 Mode =====================
+function LotteryV2Mode({ lvState }: { lvState: LV2State }) {
+  const [slotNames, setSlotNames] = useState<string[]>(Array(10).fill('?'))
+  const [slotStopped, setSlotStopped] = useState<boolean[]>(Array(10).fill(false))
+  const [showWinners, setShowWinners] = useState(false)
+  const slotsRef = useRef<{ intervals: number[]; timers: number[] }>({ intervals: [], timers: [] })
+
+  useEffect(() => {
+    // Cleanup previous animation
+    slotsRef.current.intervals.forEach(id => clearInterval(id))
+    slotsRef.current.timers.forEach(id => clearTimeout(id))
+    slotsRef.current = { intervals: [], timers: [] }
+
+    if (lvState.phase === 'animating') {
+      setShowWinners(false)
+      setSlotNames(Array(10).fill('?'))
+      setSlotStopped(Array(10).fill(false))
+
+      const allNames = lvState.pool.map(p => p.name)
+      if (allNames.length === 0) return
+
+      // Start all 10 slots spinning
+      for (let i = 0; i < 10; i++) {
+        const idx = i
+        const id = window.setInterval(() => {
+          setSlotNames(prev => {
+            const next = [...prev]
+            next[idx] = allNames[Math.floor(Math.random() * allNames.length)]
+            return next
+          })
+        }, 50)
+        slotsRef.current.intervals.push(id)
+      }
+
+      // Stop slots with staggering
+      const winnerNames = lvState.currentWinners.map(w => w.name)
+      const decelIntervals = [80, 120, 200, 350, 500]
+
+      for (let i = 0; i < 10; i++) {
+        const idx = i
+        const stopDelay = 2000 + idx * 400
+
+        const timerId = window.setTimeout(() => {
+          clearInterval(slotsRef.current.intervals[idx])
+
+          // Deceleration: 5 steps with increasing interval
+          let step = 0
+          function decel() {
+            if (step >= 5) {
+              const finalName = idx < winnerNames.length ? winnerNames[idx] : allNames[Math.floor(Math.random() * allNames.length)]
+              setSlotNames(prev => {
+                const next = [...prev]
+                next[idx] = finalName
+                return next
+              })
+              setSlotStopped(prev => {
+                const next = [...prev]
+                next[idx] = true
+                return next
+              })
+              return
+            }
+            setSlotNames(prev => {
+              const next = [...prev]
+              next[idx] = allNames[Math.floor(Math.random() * allNames.length)]
+              return next
+            })
+            step++
+            setTimeout(decel, decelIntervals[step - 1])
+          }
+          decel()
+        }, stopDelay)
+        slotsRef.current.timers.push(timerId)
+      }
+
+      // Signal animation done after last slot stops + deceleration + buffer
+      const totalAnimTime = 2000 + 9 * 400 + 5 * 500 + 500
+      const doneTimer = window.setTimeout(() => {
+        getSocket().emit('stage:lottery-v2-animation-done')
+      }, totalAnimTime)
+
+      return () => {
+        slotsRef.current.intervals.forEach(id => clearInterval(id))
+        slotsRef.current.timers.forEach(id => clearTimeout(id))
+        clearTimeout(doneTimer)
+      }
+    }
+
+    if (lvState.phase === 'revealed') {
+      setShowWinners(true)
+    }
+  }, [lvState.phase, lvState.currentRound])
+
+  // All-complete
+  if (lvState.phase === 'all-complete') {
+    return <LotteryV2CompleteView lvState={lvState} />
+  }
+
+  // Ready phase
+  if (lvState.phase === 'ready') {
+    const roundLabel = lvState.currentRound <= 3 ? `第 ${lvState.currentRound} 轮抽奖` : '补抽第4轮'
+    return (
+      <div className="lottery-v2-stage fade-in">
+        <div className="lv2-stage-title">🎊 幸运抽奖</div>
+        <div className="lv2-round-badge">{roundLabel}</div>
+        <div className="lv2-pool-info">
+          签到人数 {lvState.pool.length + lvState.allWinnerIds.length} ·
+          可抽 {lvState.pool.length} 人
+        </div>
+        {lvState.currentRound === 4 && (
+          <div className="lv2-round4-note">第1-3轮未到场奖品补抽</div>
+        )}
+        <button className="lv2-draw-btn" onClick={() => getSocket().emit('stage:lottery-v2-draw')}>
+          🎰 开始抽奖
+        </button>
+      </div>
+    )
+  }
+
+  // Animating or revealed
+  const winnerNames = lvState.currentWinners.map(w => w.name)
+  const gridSlots = Array.from({ length: 10 }, (_, i) => i)
+
+  return (
+    <div className="lottery-v2-stage fade-in">
+      <div className="lv2-stage-title">🎊 幸运抽奖</div>
+      <div className="lv2-round-badge">第 {lvState.currentRound} 轮</div>
+      <div className={`lv2-slot-grid ${lvState.phase === 'revealed' ? 'revealed' : ''}`}>
+        {gridSlots.map(i => (
+          <div key={i} className={`lv2-slot-cell ${slotStopped[i] ? 'stopped' : 'spinning'} ${showWinners && i < winnerNames.length ? 'winner' : ''}`}>
+            <span className="lv2-slot-name">{slotNames[i] || '?'}</span>
+            {slotStopped[i] && showWinners && i < winnerNames.length && (
+              <span className="lv2-slot-check">🎉</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {showWinners && (
+        <div className="lv2-revealed">
+          <p className="lv2-revealed-text">🎊 恭喜以上中奖者！</p>
+        </div>
+      )}
+      {/* Confetti when revealed */}
+      {showWinners && (
+        <div className="lottery-stage-confetti">
+          {Array.from({ length: 40 }).map((_, i) => (
+            <div key={i} className="lottery-confetti-piece" style={{
+              left: `${Math.random() * 100}%`,
+              backgroundColor: ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c084fc','#ff8fab'][i % 6],
+              animationDelay: `${Math.random() * 2}s`,
+              animationDuration: `${2 + Math.random() * 2}s`,
+            }} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LotteryV2CompleteView({ lvState }: { lvState: LV2State }) {
+  const roundOrder = [1, 2, 3, 4].filter(r => lvState.roundResults[r])
+  const absentCount = [1, 2, 3].reduce((sum, r) => {
+    const rr = lvState.roundResults[r]
+    return sum + (rr ? rr.absentIds.length : 0)
+  }, 0)
+
+  return (
+    <div className="lottery-v2-stage fade-in">
+      <div className="lv2-stage-title">🎊 抽奖完成</div>
+      <div className="lv2-complete-summary">
+        {roundOrder.map(r => {
+          const rd = lvState.roundResults[r]!
+          return (
+            <div key={r} className="lv2-complete-round">
+              <h3>{r <= 3 ? `第 ${r} 轮` : '补抽第4轮'}</h3>
+              <div className="lv2-complete-winners">
+                {rd.winners.map(w => (
+                  <div key={w.id} className={`lv2-complete-winner ${rd.absentIds.includes(w.id) ? 'absent' : ''}`}>
+                    <span className="lv2-cw-name">{w.name}</span>
+                    <span className="lv2-cw-dept">{w.department}</span>
+                    {rd.absentIds.includes(w.id) && <span className="lv2-cw-absent">缺席</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {absentCount > 0 && (
+        <p className="lv2-complete-note">共 {absentCount} 人缺席，已通过第4轮补抽</p>
+      )}
+    </div>
+  )
+}
+
 // ===================== Helpers =====================
 
 function FloatingQR() {
@@ -1052,7 +1260,7 @@ function modeLabel(mode: string): string {
     opening: '🎬 开幕', waiting: '等待中', reading: '读题中', quizzing: '抢答中',
     buzzed: '已抢中', result: '判定', settlement: '结算',
     lottery: '🎊 抽奖中', 'round-intro': '📋 队伍入座',
-    countdown: '⏱ 倒计时',
+    countdown: '⏱ 倒计时', 'lottery-v2': '🎊 签到抽奖',
   }
   return map[mode] || mode
 }

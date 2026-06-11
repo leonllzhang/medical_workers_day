@@ -14,6 +14,7 @@ const io = new Server(httpServer, {
 });
 
 app.use(cors());
+app.use(express.json());
 
 // ==================== Types ====================
 interface Team {
@@ -47,7 +48,7 @@ interface Danmaku {
   timestamp: number;
 }
 
-type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening' | 'countdown';
+type GameMode = 'waiting' | 'reading' | 'quizzing' | 'buzzed' | 'result' | 'settlement' | 'lottery' | 'round-intro' | 'opening' | 'countdown' | 'lottery-v2';
 
 interface LastResult {
   correct: boolean;
@@ -80,6 +81,31 @@ interface DrawSession {
   animatingTeams: Team[];
   drawHistory: { teamId: string; roundIndex: number }[];
   drawnTeamIds: string[];
+}
+
+interface CheckInPerson {
+  id: string;
+  name: string;
+  department: string;
+  timestamp: number;
+}
+
+interface LotteryV2RoundData {
+  roundNumber: number;
+  winners: CheckInPerson[];
+  absentIds: string[];
+  completed: boolean;
+}
+
+interface LotteryV2State {
+  active: boolean;
+  currentRound: number;
+  phase: 'idle' | 'ready' | 'animating' | 'revealed' | 'all-complete';
+  currentWinners: CheckInPerson[];
+  pool: CheckInPerson[];
+  allCheckInNames: string[];
+  roundResults: Record<number, LotteryV2RoundData | null>;
+  allWinnerIds: string[];
 }
 
 interface GameState {
@@ -278,6 +304,13 @@ const MAX_DANMAKU = 50;
 let drawSession: DrawSession | null = null;
 let drawAnimationTimer: NodeJS.Timeout | null = null;
 
+const checkIns: CheckInPerson[] = [];
+let lotteryV2State: LotteryV2State | null = null;
+
+function broadcastLotteryV2State() {
+  io.emit('lottery-v2:state', lotteryV2State);
+}
+
 // Built-in meme phrases
 const memePhrases = [
   '这题我会！快选我！',
@@ -415,6 +448,11 @@ io.on('connection', (socket) => {
   // Send current draw session state if active
   if (drawSession) {
     socket.emit('draw:state', drawSession);
+  }
+
+  // Send current lottery v2 state if active
+  if (lotteryV2State) {
+    socket.emit('lottery-v2:state', lotteryV2State);
   }
 
   // ---- Danmaku ----
@@ -601,6 +639,143 @@ io.on('connection', (socket) => {
     state.mode = state.previousMode;
     broadcastState();
     console.log(`[host] lottery ended, restored: ${state.mode}`);
+  });
+
+  // ==================== Lottery V2 Events ====================
+
+  socket.on('host:lottery-v2-start', () => {
+    if (!lotteryV2State) {
+      lotteryV2State = {
+        active: true,
+        currentRound: 1,
+        phase: 'ready',
+        currentWinners: [],
+        pool: [],
+        allCheckInNames: [],
+        roundResults: {},
+        allWinnerIds: [],
+      };
+    }
+    // Compute pool for display (exclude already-won)
+    lotteryV2State.pool = checkIns.filter(p => !lotteryV2State!.allWinnerIds.includes(p.id));
+    state.previousMode = state.mode;
+    state.mode = 'lottery-v2';
+    broadcastState();
+    broadcastLotteryV2State();
+    console.log(`[lottery-v2] started`);
+  });
+
+  socket.on('stage:lottery-v2-draw', () => {
+    if (!lotteryV2State || lotteryV2State.phase !== 'ready') return;
+
+    let pool: CheckInPerson[];
+    let drawCount: number;
+
+    if (lotteryV2State.currentRound <= 3) {
+      // Rounds 1-3: pool = all check-ins minus already-won, draw up to 10
+      pool = checkIns.filter(p => !lotteryV2State!.allWinnerIds.includes(p.id));
+      drawCount = Math.min(10, pool.length);
+    } else {
+      // Round 4: pool = all check-ins minus already-won (from rounds 1-3)
+      pool = checkIns.filter(p => !lotteryV2State!.allWinnerIds.includes(p.id));
+      // Draw count = number of absent winners from rounds 1-3
+      let absentCount = 0;
+      for (let r = 1; r <= 3; r++) {
+        const rr = lotteryV2State.roundResults[r];
+        if (rr) absentCount += rr.absentIds.length;
+      }
+      drawCount = Math.min(absentCount, pool.length);
+      if (drawCount <= 0) {
+        lotteryV2State.phase = 'all-complete';
+        broadcastLotteryV2State();
+        return;
+      }
+    }
+
+    // Shuffle pool and pick winners
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    const winners = shuffled.slice(0, drawCount);
+
+    lotteryV2State.currentWinners = winners;
+    lotteryV2State.pool = pool;
+    lotteryV2State.phase = 'animating';
+
+    broadcastLotteryV2State();
+    console.log(`[lottery-v2] round ${lotteryV2State.currentRound} draw: ${winners.map(w => w.name).join(', ')}`);
+  });
+
+  socket.on('stage:lottery-v2-animation-done', () => {
+    if (!lotteryV2State || lotteryV2State.phase !== 'animating') return;
+    lotteryV2State.phase = 'revealed';
+    broadcastLotteryV2State();
+    console.log(`[lottery-v2] round ${lotteryV2State.currentRound} animation done`);
+  });
+
+  socket.on('host:lottery-v2-confirm-round', (data: { absentIds: string[] }) => {
+    if (!lotteryV2State || lotteryV2State.phase !== 'revealed') return;
+
+    const round = lotteryV2State.currentRound;
+    const absentIds = data.absentIds || [];
+
+    // Save round result
+    lotteryV2State.roundResults[round] = {
+      roundNumber: round,
+      winners: [...lotteryV2State.currentWinners],
+      absentIds,
+      completed: true,
+    };
+
+    // Add winners to allWinnerIds (winners can't be drawn again)
+    for (const w of lotteryV2State.currentWinners) {
+      if (!lotteryV2State.allWinnerIds.includes(w.id)) {
+        lotteryV2State.allWinnerIds.push(w.id);
+      }
+    }
+
+    // Determine next step
+    if (round >= 4) {
+      lotteryV2State.phase = 'all-complete';
+    } else if (round === 3) {
+      // Check if round 4 is needed (any absent winners from rounds 1-3)
+      let absentCount = 0;
+      for (let r = 1; r <= 3; r++) {
+        const rr = lotteryV2State.roundResults[r];
+        if (rr) absentCount += rr.absentIds.length;
+      }
+      if (absentCount > 0) {
+        lotteryV2State.currentRound = 4;
+        lotteryV2State.phase = 'ready';
+        lotteryV2State.currentWinners = [];
+        lotteryV2State.pool = checkIns.filter(p => !lotteryV2State!.allWinnerIds.includes(p.id));
+      } else {
+        lotteryV2State.phase = 'all-complete';
+      }
+    } else {
+      // Advance to next round (2 or 3)
+      lotteryV2State.currentRound++;
+      lotteryV2State.phase = 'ready';
+      lotteryV2State.currentWinners = [];
+      lotteryV2State.pool = checkIns.filter(p => !lotteryV2State!.allWinnerIds.includes(p.id));
+    }
+
+    broadcastLotteryV2State();
+    console.log(`[lottery-v2] round ${round} confirmed, absent: ${absentIds.length}`);
+  });
+
+  socket.on('host:lottery-v2-exit', () => {
+    if (!lotteryV2State) return;
+    state.mode = state.previousMode;
+    broadcastState();
+    broadcastLotteryV2State();
+    console.log(`[lottery-v2] exited, restored: ${state.previousMode}`);
+  });
+
+  socket.on('host:lottery-v2-end', () => {
+    state.mode = state.previousMode || 'waiting';
+    lotteryV2State = null;
+    broadcastState();
+    io.emit('lottery-v2:state', null);
+    console.log(`[lottery-v2] ended`);
   });
 
   // ---- Host: show opening (save previous mode) ----
@@ -942,6 +1117,28 @@ app.get('/api/media/audio/backmusic', (_req, res) => {
     const files = fs.readdirSync(dir).filter(f => /\.(mp3|wav|ogg|m4a)$/i.test(f));
     res.json(files);
   } catch { res.json([]); }
+});
+
+// ==================== Check-in REST API ====================
+app.post('/api/checkin', (req, res) => {
+  const { name, department } = req.body;
+  if (!name?.trim() || !department?.trim()) {
+    res.status(400).json({ error: '姓名和科室不能为空' });
+    return;
+  }
+  const person: CheckInPerson = {
+    id: `checkin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    name: name.trim(),
+    department: department.trim(),
+    timestamp: Date.now(),
+  };
+  checkIns.push(person);
+  io.emit('checkin:new', person);
+  res.json({ success: true, person });
+});
+
+app.get('/api/checkin/list', (_req, res) => {
+  res.json(checkIns);
 });
 
 // In production, serve built client

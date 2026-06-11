@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSocket } from '../socket'
-import type { GameStateData, Team, Prize, Question } from '../types'
+import type { GameStateData, Team, Prize, Question, CheckInPerson, LotteryV2State as LV2State } from '../types'
 import './HostConsole.css'
 
 const PRIZES: Prize[] = [
@@ -29,6 +29,9 @@ export default function HostConsole() {
   const [selectedPrizeId, setSelectedPrizeId] = useState(PRIZES[0].id)
   const [winnerCount, setWinnerCount] = useState(1)
   const [questions, setQuestions] = useState<Question[]>([])
+  const [checkInCount, setCheckInCount] = useState(0)
+  const [lvState, setLvState] = useState<LV2State | null>(null)
+  const [absentIds, setAbsentIds] = useState<string[]>([])
 
   useEffect(() => {
     const socket = getSocket()
@@ -46,6 +49,18 @@ export default function HostConsole() {
     socket.on('questions', (qs: Question[]) => setQuestions(qs))
     socket.emit('host:get-questions')
 
+    // Check-in state
+    socket.on('checkin:new', () => {
+      setCheckInCount(c => c + 1)
+    })
+    socket.on('lottery-v2:state', (lv: LV2State | null) => {
+      setLvState(lv)
+    })
+    fetch('/api/checkin/list')
+      .then(r => r.json())
+      .then(list => setCheckInCount(list.length))
+      .catch(() => {})
+
     // Probe video files via API
     fetch('/api/media/videos')
       .then(r => r.json())
@@ -55,8 +70,15 @@ export default function HostConsole() {
       })
       .catch(() => {})
 
-    return () => { socket.off('game:state'); socket.off('host:error'); socket.off('questions') }
+    return () => { socket.off('game:state'); socket.off('host:error'); socket.off('questions'); socket.off('checkin:new'); socket.off('lottery-v2:state') }
   }, [])
+
+  // Reset absent list when new round is revealed
+  useEffect(() => {
+    if (lvState?.phase === 'revealed') {
+      setAbsentIds([])
+    }
+  }, [lvState?.phase, lvState?.currentRound])
 
   function emit(event: string, data?: any) {
     getSocket().emit(event, data)
@@ -72,6 +94,31 @@ export default function HostConsole() {
       return
     }
     emit('host:judge', { correct, teamId: buzzed.id, points })
+  }
+
+  async function handleExportExcel() {
+    try {
+      const res = await fetch('/api/checkin/list')
+      const list: CheckInPerson[] = await res.json()
+      // BOM + CSV for proper Chinese in Excel
+      const BOM = '﻿'
+      const header = '序号,姓名,科室,签到时间\n'
+      const rows = list.map((p, i) =>
+        `${i + 1},${p.name},${p.department},${new Date(p.timestamp).toLocaleString('zh-CN')}`
+      ).join('\n')
+      const blob = new Blob([BOM + header + rows], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `签到名单_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      setLastAction('export-excel')
+      setTimeout(() => setLastAction(null), 2000)
+    } catch {
+      setErrorMsg('导出失败')
+      setTimeout(() => setErrorMsg(null), 3000)
+    }
   }
 
   function updateTeam(teamId: string, name?: string, buzzerNumber?: number) {
@@ -290,50 +337,105 @@ export default function HostConsole() {
             </div>
           </section>
 
-          {/* Lottery: Prize selection + draw */}
+          {/* Check-in + Lottery V2 */}
           <section className="host-card">
-            <h2>🎁 抽奖</h2>
-            {state?.mode === 'lottery' ? (
-              <div className="lottery-active">
-                <p className="lottery-drawing-hint">🎊 抽奖进行中，大屏正在显示结果</p>
-                <button className="hbtn outline" onClick={() => emit('host:lottery-end')}
-                  style={{ width: '100%', marginTop: 8 }}>
-                  ✕ 关闭抽奖，返回上一模式
-                </button>
-              </div>
-            ) : (
+            <h2>📋 签到抽奖</h2>
+            <div className="lv2-checkin-count">
+              已签到 <strong>{checkInCount}</strong> 人
+              <button className="hbtn-small outline" onClick={handleExportExcel}
+                style={{ float: 'right', marginTop: 2 }}>
+                📥 导出
+              </button>
+            </div>
+            {!lvState?.active ? (
               <>
-                <div className="lottery-prize-select">
-                  <label>选择奖品</label>
-                  <div className="prize-grid">
-                    {PRIZES.map(p => (
-                      <button
-                        key={p.id}
-                        className={`prize-card ${selectedPrizeId === p.id ? 'selected' : ''}`}
-                        onClick={() => setSelectedPrizeId(p.id)}
-                      >
-                        <span className="prize-icon">{p.icon}</span>
-                        <span className="prize-name">{p.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="lottery-winner-count">
-                  <label>中奖人数</label>
-                  <div className="count-btns">
-                    {[1, 2, 3, 5].map(n => (
-                      <button
-                        key={n}
-                        className={`count-btn ${winnerCount === n ? 'selected' : ''}`}
-                        onClick={() => setWinnerCount(n)}
-                      >{n} 人</button>
-                    ))}
-                  </div>
-                </div>
-                <button className="hbtn lottery-draw-btn" onClick={() => emit('host:lottery-draw', { prizeId: selectedPrizeId, winnerCount })}>
-                  🎲 抽奖
-                </button>
+                {state?.mode !== 'lottery-v2' && (
+                  <button className="hbtn lottery-btn" onClick={() => emit('host:lottery-v2-start')}
+                    style={{ marginTop: 8 }}>
+                    🎰 开始抽奖
+                  </button>
+                )}
+                {(state?.mode === 'lottery-v2' || lvState?.active) && (
+                  <p className="card-hint" style={{ marginTop: 8 }}>抽奖已激活，等待大屏操作</p>
+                )}
               </>
+            ) : (
+              <div className="lv2-controls">
+                {lvState.phase === 'ready' && (
+                  <p className="lv2-phase-hint">
+                    第 {lvState.currentRound} 轮准备就绪，等待大屏按下抽奖
+                  </p>
+                )}
+                {lvState.phase === 'animating' && (
+                  <p className="lv2-phase-hint animating">
+                    🎰 第 {lvState.currentRound} 轮抽奖中...
+                  </p>
+                )}
+                {lvState.phase === 'revealed' && (
+                  <div className="lv2-revealed-panel">
+                    <p className="lv2-revealed-title">第 {lvState.currentRound} 轮中奖者</p>
+                    <div className="lv2-revealed-list">
+                      {lvState.currentWinners.map(w => {
+                        const isAbsent = absentIds.includes(w.id)
+                        return (
+                          <label key={w.id} className={`lv2-winner-item ${isAbsent ? 'absent' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={isAbsent}
+                              onChange={() => {
+                                setAbsentIds(prev =>
+                                  prev.includes(w.id)
+                                    ? prev.filter(id => id !== w.id)
+                                    : [...prev, w.id]
+                                )
+                              }}
+                            />
+                            <span className="lv2-winner-name">{w.name}</span>
+                            <span className="lv2-winner-dept">{w.department}</span>
+                            <span className="lv2-absent-label">缺席</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <button className="hbtn success" style={{ width: '100%', marginTop: 8 }}
+                      onClick={() => { emit('host:lottery-v2-confirm-round', { absentIds }); setAbsentIds([]) }}>
+                      ✅ 确认本轮结果 {absentIds.length > 0 ? `(${absentIds.length}人缺席)` : ''}
+                    </button>
+                  </div>
+                )}
+                {lvState.phase === 'all-complete' && (
+                  <div className="lv2-complete-panel">
+                    <p className="lv2-complete-label">🎊 全部抽奖完成</p>
+                    <div className="lv2-summary">
+                      {[1, 2, 3, 4].filter(r => lvState.roundResults[r]).map(r => {
+                        const rd = lvState.roundResults[r]!
+                        return (
+                          <div key={r} className="lv2-summary-round">
+                            <span className="lv2-summary-rlabel">第{r}轮</span>
+                            <span className="lv2-summary-rwinners">
+                              {rd.winners.map(w => w.name).join('、')}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                <div className="lv2-control-btns">
+                  {lvState.phase !== 'revealed' && lvState.phase !== 'all-complete' && (
+                    <button className="hbtn outline" onClick={() => emit('host:lottery-v2-exit')}
+                      style={{ flex: 1 }}>
+                      ⏸ 暂停
+                    </button>
+                  )}
+                  {lvState.phase !== 'revealed' && (
+                    <button className="hbtn danger" onClick={() => emit('host:lottery-v2-end')}
+                      style={{ flex: 1 }}>
+                      ✕ 结束
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </section>
         </div>
@@ -348,6 +450,7 @@ function modeLabel(mode: string): string {
     buzzed: '已抢中', result: '判定', settlement: '结算',
     lottery: '🎊 抽奖', 'round-intro': '📋 队伍入座',
     opening: '🎬 开幕', countdown: '⏱ 倒计时',
+    'lottery-v2': '🎊 签到抽奖',
   }
   return map[mode] || mode
 }

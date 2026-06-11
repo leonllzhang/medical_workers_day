@@ -195,3 +195,128 @@
 }
 .lottery-active { text-align: center; }
 .lottery-drawing-hint { font-size: 13px; color: var(--gold); animation: pulse 1.5s ease-in-out infinite; }
+
+/* ====== Lottery V2 Controls ====== */
+.lv2-checkin-count {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.lv2-checkin-count strong {
+  color: var(--gold);
+  font-size: 20px;
+}
+.lv2-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lv2-phase-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 8px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+}
+.lv2-phase-hint.animating {
+  color: var(--gold);
+  font-weight: 700;
+  animation: pulse 1s ease-in-out infinite;
+}
+.lv2-revealed-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lv2-revealed-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
+.lv2-revealed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.lv2-winner-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.lv2-winner-item:hover {
+  background: rgba(255,255,255,0.06);
+}
+.lv2-winner-item.absent {
+  opacity: 0.6;
+  background: rgba(239,68,68,0.08);
+}
+.lv2-winner-item input[type="checkbox"] {
+  accent-color: var(--gold);
+}
+.lv2-winner-name {
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+.lv2-winner-dept {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.lv2-absent-label {
+  font-size: 11px;
+  color: var(--danger);
+  font-weight: 600;
+  display: none;
+}
+.lv2-winner-item.absent .lv2-absent-label {
+  display: inline;
+}
+.lv2-complete-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lv2-complete-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  text-align: center;
+}
+.lv2-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.lv2-summary-round {
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 4px;
+}
+.lv2-summary-rlabel {
+  font-weight: 700;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.lv2-summary-rwinners {
+  color: var(--text-dim);
+}
+.lv2-control-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
