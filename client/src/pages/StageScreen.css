@@ -66,7 +66,7 @@
 
 /* ====== Scoreboard Panel ====== */
 .scoreboard-panel {
-  width: 280px; display: flex; flex-direction: column;
+  width: 360px; display: flex; flex-direction: column;
   padding: 12px 14px; gap: 0; z-index: 20;
   background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.3) 100%);
   backdrop-filter: blur(8px);
@@ -91,7 +91,7 @@
   transform: scale(1.02);
 }
 .sb-rank { width: 20px; font-size: 14px; text-align: center; flex-shrink: 0; }
-.sb-name { flex: 1; font-size: 16px; font-weight: 600; color: #1a1a2e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-name { flex: 1; font-size: 14px; font-weight: 600; color: #1a1a2e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-buzzer { font-size: 12px; color: #636e72; min-width: 60px; text-align: center; flex-shrink: 0; white-space: nowrap; }
 .sb-score { font-size: 20px; font-weight: 800; min-width: 36px; text-align: right; flex-shrink: 0; }
 
@@ -233,35 +233,62 @@
 .result-verdict.wrong { color: var(--danger); }
 .result-points { font-size: 48px; font-weight: 900; color: #e67e22; }
 
-/* ====== Settlement Mode (full-screen) ====== */
+/* ====== Settlement Mode (full-screen prize tiers) ====== */
 .mode-settlement {
   position: fixed; inset: 0; z-index: 300;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.3); backdrop-filter: blur(6px);
-  animation: fadeIn 0.35s ease-out;
+  background: rgba(0,0,0,0.4); backdrop-filter: blur(8px);
+  animation: fadeIn 0.4s ease-out;
 }
 .settlement-board-full {
-  width: 75%; max-width: 800px; max-height: 85vh;
-  background: rgba(255,255,255,0.95); backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,0.4); border-radius: 24px; padding: 28px 36px;
+  width: 80%; max-width: 1000px; max-height: 88vh;
+  background: rgba(255,255,255,0.96); backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.4); border-radius: 28px; padding: 32px 40px;
   display: flex; flex-direction: column;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.15);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
   overflow: hidden;
 }
-.settlement-board-full h2 { text-align: center; margin-bottom: 16px; font-size: 32px; color: #1a1a2e; flex-shrink: 0; }
-.final-rank-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; padding-right: 4px; }
-.final-rank-item {
-  display: flex; align-items: center; gap: 16px; padding: 10px 16px;
-  border-radius: 10px; position: relative; overflow: hidden; flex-shrink: 0;
+.settlement-title {
+  text-align: center; font-size: 42px; font-weight: 900;
+  color: #1a1a2e; flex-shrink: 0; margin-bottom: 20px;
+  letter-spacing: 4px;
 }
-.final-rank-item.podium { background: rgba(230,126,34,0.06); }
-.final-rank-num { width: 36px; flex-shrink: 0; text-align: center; font-size: 20px; }
-.final-rank-bar {
-  position: absolute; left: 52px; height: 100%; border-radius: 10px;
-  opacity: 0.08; transition: width 0.6s ease;
+.settlement-tiers {
+  display: flex; flex-direction: column; gap: 20px;
+  overflow-y: auto; flex: 1; padding-right: 4px;
 }
-.final-rank-name { flex: 1; font-size: 18px; font-weight: 600; z-index: 1; color: #1a1a2e; }
-.final-rank-score { font-size: 24px; font-weight: 800; color: #e67e22; z-index: 1; }
+.settlement-tier {
+  border-radius: 16px; padding: 16px 20px;
+  background: rgba(0,0,0,0.02);
+  border: 1px solid rgba(0,0,0,0.04);
+}
+.settlement-tier-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px; font-weight: 800;
+}
+.settlement-tier-icon { font-size: 28px; }
+.settlement-tier-label { font-size: 24px; }
+.settlement-tier-count { font-size: 16px; opacity: 0.6; font-weight: 600; }
+.settlement-tier-teams {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.settlement-tier-team {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 10px;
+  background: rgba(255,255,255,0.7);
+  border: 2px solid; font-weight: 700;
+  animation: slideUp 0.3s ease-out both;
+  min-width: 120px;
+}
+.settlement-tier-team:nth-child(1) { animation-delay: 0.0s; }
+.settlement-tier-team:nth-child(2) { animation-delay: 0.05s; }
+.settlement-tier-team:nth-child(3) { animation-delay: 0.1s; }
+.settlement-tier-team:nth-child(4) { animation-delay: 0.15s; }
+.settlement-tier-team:nth-child(5) { animation-delay: 0.2s; }
+.settlement-tier-team:nth-child(6) { animation-delay: 0.25s; }
+.settlement-tier-rank { font-size: 14px; opacity: 0.5; font-weight: 800; }
+.settlement-tier-name { font-size: 18px; font-weight: 700; }
+.settlement-tier-score { font-size: 16px; font-weight: 800; margin-left: auto; opacity: 0.8; }
 
 /* ====== Round Intro Mode ====== */
 .mode-round-intro {

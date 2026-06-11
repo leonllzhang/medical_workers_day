@@ -839,20 +839,44 @@ function OpeningMode() {
 
 const LOTUS_COLORS = ['#ff6b9d', '#c084fc', '#4d96ff', '#6bcb77']
 
+type PrizeTier = { label: string; icon: string; color: string; count: number }
+
+const PRIZE_TIERS: PrizeTier[] = [
+  { label: '一等奖', icon: '🥇', color: '#ff6b35', count: 2 },
+  { label: '二等奖', icon: '🥈', color: '#4a6fa5', count: 4 },
+  { label: '三等奖', icon: '🥉', color: '#cd7f32', count: 6 },
+]
+
 function SettlementMode({ teams }: { teams: Team[] }) {
+  let teamIdx = 0
   return (
     <div className="mode-settlement fade-in">
       <div className="settlement-board-full">
-        <h2>🏆 最终排名</h2>
-        <div className="final-rank-list">
-          {teams.map((t, i) => (
-            <div key={t.id} className={`final-rank-item ${i < 3 ? 'podium' : ''}`}>
-              <span className="final-rank-num">{i < 3 ? ['🥇', '🥈', '🥉'][i] : `#${i + 1}`}</span>
-              <div className="final-rank-bar" style={{ width: `${(t.score / Math.max(teams[0]?.score || 1, 1)) * 100}%`, backgroundColor: t.color }} />
-              <span className="final-rank-name">{t.name}</span>
-              <span className="final-rank-score">{t.score}</span>
-            </div>
-          ))}
+        <h2 className="settlement-title">🏆 最终排名</h2>
+        <div className="settlement-tiers">
+          {PRIZE_TIERS.map((tier) => {
+            const tierTeams = teams.slice(teamIdx, teamIdx + tier.count)
+            teamIdx += tier.count
+            if (tierTeams.length === 0) return null
+            return (
+              <div key={tier.label} className="settlement-tier">
+                <div className="settlement-tier-header" style={{ color: tier.color }}>
+                  <span className="settlement-tier-icon">{tier.icon}</span>
+                  <span className="settlement-tier-label">{tier.label}</span>
+                  <span className="settlement-tier-count">（{tierTeams.length}名）</span>
+                </div>
+                <div className="settlement-tier-teams">
+                  {tierTeams.map((t) => (
+                    <div key={t.id} className="settlement-tier-team" style={{ borderColor: t.color }}>
+                      <span className="settlement-tier-rank">#{tierTeams.indexOf(t) + 1}</span>
+                      <span className="settlement-tier-name" style={{ color: t.color }}>{t.name}</span>
+                      <span className="settlement-tier-score">{t.score}分</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
