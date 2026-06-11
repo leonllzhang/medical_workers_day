@@ -839,6 +839,8 @@ function CountdownMode({ countdownEndTime }: { countdownEndTime: number }) {
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
   const trackRef = useRef<string[]>([])
+  const missionSwitchedRef = useRef(false)
+  const alarmPlayedRef = useRef(false)
 
   // Fetch music files
   useEffect(() => {
@@ -862,12 +864,56 @@ function CountdownMode({ countdownEndTime }: { countdownEndTime: number }) {
     function tick() {
       const diff = Math.max(0, Math.floor((endTimeRef.current - Date.now()) / 1000))
       setRemaining(diff)
-      if (diff <= 0) { setExpired(true); clearInterval(timerRef.current) }
+      // Switch to mission_impossible at 5-minute mark
+      if (diff > 0 && diff <= 300 && !missionSwitchedRef.current) {
+        missionSwitchedRef.current = true
+        switchToMissionImpossible()
+      }
+      if (diff <= 0) {
+        setExpired(true)
+        clearInterval(timerRef.current)
+        if (!alarmPlayedRef.current) {
+          alarmPlayedRef.current = true
+          playAlarmSound()
+        }
+      }
     }
     tick()
     timerRef.current = setInterval(tick, 1000)
     return () => clearInterval(timerRef.current)
   }, [started])
+
+  function switchToMissionImpossible() {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.pause()
+    audio.loop = false
+    audio.onended = null
+    audio.src = '/media/audio/mission_impossible.mp3'
+    audio.play().then(() => setPlaying(true)).catch(() => {})
+  }
+
+  function playAlarmSound() {
+    const audio = audioRef.current
+    if (audio) { audio.pause(); audio.removeAttribute('src') }
+    setPlaying(false)
+    // Web Audio API alarm beeps
+    try {
+      const ctx = new AudioContext()
+      for (let i = 0; i < 10; i++) {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.type = 'square'
+        osc.frequency.setValueAtTime(880, ctx.currentTime + i * 0.3)
+        gain.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.3)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.3 + 0.25)
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.start(ctx.currentTime + i * 0.3)
+        osc.stop(ctx.currentTime + i * 0.3 + 0.25)
+      }
+    } catch {}
+  }
 
   function handleStart() {
     getSocket().emit('host:start-countdown')
@@ -879,6 +925,7 @@ function CountdownMode({ countdownEndTime }: { countdownEndTime: number }) {
 
   const cIdxRef = useRef(0)
   function toggleMusic() {
+    if (missionSwitchedRef.current) return  // can't override mission_impossible
     const audio = audioRef.current
     if (!audio || trackRef.current.length === 0) return
     if (playing) {
