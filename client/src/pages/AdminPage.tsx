@@ -6,7 +6,7 @@ import './AdminPage.css'
 // Round allocation algorithm
 function calcRoundDistribution(n: number): { round: number; size: number }[] {
   if (n <= 0) return []
-  const maxPerRound = 8
+  const maxPerRound = 10
   const numRounds = Math.ceil(n / maxPerRound)
   const baseSize = Math.floor(n / numRounds)
   const remainder = n % numRounds
@@ -305,7 +305,7 @@ export default function AdminPage() {
                       </select>
                       <select className="admin-select sm" value={t.buzzerNumber}
                         onChange={e => changeTeamBuzzer(t.id, parseInt(e.target.value))}>
-                        {Array.from({ length: 8 }, (_, i) => i + 1).map(n => (
+                        {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
                           <option key={n} value={n}>抢答器 #{n}</option>
                         ))}
                       </select>

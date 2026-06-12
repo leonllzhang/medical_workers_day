@@ -203,7 +203,7 @@ export default function HostConsole() {
             <h2>🔔 抢答器命中</h2>
             <p className="card-hint">在物理抢答器显示命中号码后，在此选择并按确认</p>
             <div className="buzzer-grid">
-              {Array.from({ length: 8 }, (_, i) => i + 1).map(n => {
+              {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
                 const team = state?.teams.find(t => t.buzzerNumber === n && t.round === state?.currentRound)
                 return (
                   <button

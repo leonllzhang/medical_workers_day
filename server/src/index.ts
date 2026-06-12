@@ -361,7 +361,7 @@ function broadcastDrawState() {
 
 function calcRoundDistribution(n: number): number[] {
   if (n <= 0) return [];
-  const maxPerRound = 8;
+  const maxPerRound = 10;
   const numRounds = Math.ceil(n / maxPerRound);
   const baseSize = Math.floor(n / numRounds);
   const remainder = n % numRounds;

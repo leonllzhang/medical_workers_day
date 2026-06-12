@@ -610,13 +610,13 @@ function DrawCeremonyMode({ session, onDrawTeam }: { session: DrawSession; onDra
         setRevealedTeams(prev => [...prev, team.id])
         setHighlightedTeamIds([])
         idx++
-        // Wait for fly animation (~700ms), then next team
-        animFrameRef.current = window.setTimeout(processNext, 750)
-      }, 500)
+        // Then next team
+        animFrameRef.current = window.setTimeout(processNext, 350)
+      }, 200)
     }
 
     // Small initial pause, then start
-    animFrameRef.current = window.setTimeout(processNext, 400)
+    animFrameRef.current = window.setTimeout(processNext, 200)
 
     return () => {
       if (animFrameRef.current) {
