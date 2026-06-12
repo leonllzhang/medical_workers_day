@@ -778,6 +778,15 @@ io.on('connection', (socket) => {
     console.log(`[lottery-v2] ended`);
   });
 
+  // ---- Host: clear check-in records ----
+  socket.on('host:clear-checkins', () => {
+    checkIns.length = 0;
+    lotteryV2State = null;
+    io.emit('lottery-v2:state', null);
+    io.emit('game:state', { ...state }); // trigger re-fetch
+    console.log(`[host] check-ins cleared`);
+  });
+
   // ---- Host: show opening (save previous mode) ----
   socket.on('host:show-opening', () => {
     state.previousMode = state.mode;
@@ -1124,6 +1133,11 @@ app.post('/api/checkin', (req, res) => {
   const { name, department } = req.body;
   if (!name?.trim() || !department?.trim()) {
     res.status(400).json({ error: '姓名和科室不能为空' });
+    return;
+  }
+  // 同名去重
+  if (checkIns.some(p => p.name === name.trim())) {
+    res.status(409).json({ error: `"${name.trim()}" 已签到，请勿重复签到` });
     return;
   }
   const person: CheckInPerson = {

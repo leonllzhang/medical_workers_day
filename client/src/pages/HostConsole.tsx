@@ -343,8 +343,17 @@ export default function HostConsole() {
             <div className="lv2-checkin-count">
               已签到 <strong>{checkInCount}</strong> 人
               <button className="hbtn-small outline" onClick={handleExportExcel}
-                style={{ float: 'right', marginTop: 2 }}>
+                style={{ float: 'right', marginTop: 2, marginLeft: 4 }}>
                 📥 导出
+              </button>
+              <button className="hbtn-small outline" onClick={() => {
+                if (confirm('确认清空所有签到记录？此操作不可撤销。')) {
+                  emit('host:clear-checkins')
+                  setCheckInCount(0)
+                  setLvState(null)
+                }
+              }} style={{ float: 'right', marginTop: 2 }}>
+                🗑 清空
               </button>
             </div>
             {!lvState?.active ? (

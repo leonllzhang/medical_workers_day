@@ -829,14 +829,16 @@ function OpeningMode() {
   return (
     <div className="mode-opening">
       <audio ref={audioRef} />
-      <button className={`opening-music-btn ${playing ? 'playing' : ''}`}
-        onClick={togglePlay}
-        title={playing ? '暂停背景音乐' : '播放背景音乐'}>
-        ♪
-      </button>
-      <div className="opening-checkin-qr">
-        <QRCodeCanvas value={`${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/checkin`} size={120} bgColor="#ffffff" fgColor="#0a0e27" />
-        <span className="opening-checkin-label">📋 扫码签到</span>
+      <div className="opening-top-right">
+        <button className={`opening-music-btn ${playing ? 'playing' : ''}`}
+          onClick={togglePlay}
+          title={playing ? '暂停背景音乐' : '播放背景音乐'}>
+          ♪
+        </button>
+        <div className="opening-checkin-qr">
+          <QRCodeCanvas value={`${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/checkin`} size={100} bgColor="#ffffff" fgColor="#0a0e27" />
+          <span className="opening-checkin-label">扫码签到</span>
+        </div>
       </div>
     </div>
   )
