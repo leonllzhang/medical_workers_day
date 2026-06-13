@@ -7,13 +7,13 @@
   overflow: hidden;
   pointer-events: none;
   z-index: 100;
-  mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 3%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 3%, black 100%);
 }
 .danmaku-overlay.quiz-mode {
   height: 18vh;
-  mask-image: linear-gradient(to bottom, transparent 0%, black 30%, black 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 30%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 100%);
 }
 .danmaku-overlay.quiz-mode .danmaku-item {
   font-size: 16px;
@@ -42,7 +42,7 @@
 }
 
 .danmaku-text {
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(4px);
   padding: 2px 12px;
   border-radius: 12px;
