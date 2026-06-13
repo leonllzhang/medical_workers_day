@@ -590,11 +590,6 @@ io.on('connection', (socket) => {
       state.lastResult = null;
       state.lotteryActive = false;
       state.lotteryDraw = null;
-      if (state.teams.every(t => t.score === 60)) {
-        // only reset scores if they were already 60
-      } else {
-        state.teams.forEach(t => { t.score = 60; });
-      }
     }
     if (mode === 'settlement') {
       state.buzzedTeam = null;
