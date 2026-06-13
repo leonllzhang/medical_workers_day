@@ -356,18 +356,21 @@ export default function HostConsole() {
                 🗑 清空
               </button>
             </div>
-            {!lvState?.active ? (
-              <>
+            {!lvState?.active || lvState?.phase === 'idle' ? (
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 {state?.mode !== 'lottery-v2' && (
                   <button className="hbtn lottery-btn" onClick={() => emit('host:lottery-v2-start')}
-                    style={{ marginTop: 8 }}>
-                    🎰 开始抽奖
+                    style={{ flex: 1 }}>
+                    🎰 {lvState ? `第${lvState.currentRound}轮抽奖` : '开始抽奖'}
                   </button>
                 )}
-                {(state?.mode === 'lottery-v2' || lvState?.active) && (
-                  <p className="card-hint" style={{ marginTop: 8 }}>抽奖已激活，等待大屏操作</p>
+                {lvState && (
+                  <button className="hbtn danger" onClick={() => { emit('host:lottery-v2-end'); setLvState(null) }}
+                    style={{ flex: 1 }}>
+                    ✕ 结束
+                  </button>
                 )}
-              </>
+              </div>
             ) : (
               <div className="lv2-controls">
                 {lvState.phase === 'ready' && (

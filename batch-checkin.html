@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>批量签到测试工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 32px; max-width: 520px; width: 90%; text-align: center; }
+h1 { font-size: 22px; margin-bottom: 8px; }
+p { color: #8b949e; margin-bottom: 24px; font-size: 14px; line-height: 1.6; }
+label { display: block; text-align: left; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+input { width: 100%; padding: 10px 14px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 15px; margin-bottom: 16px; }
+input:focus { outline: none; border-color: #58a6ff; }
+.btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer; margin: 8px 0; transition: opacity .2s; }
+.btn:hover { opacity: .9; }
+.btn-primary { background: #238636; color: #fff; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-danger { background: #da3633; color: #fff; }
+.btn-outline { background: transparent; border: 1px solid #30363d; color: #c9d1d9; }
+.log { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; margin-top: 16px; max-height: 300px; overflow-y: auto; text-align: left; font-size: 12px; font-family: monospace; }
+.log div { padding: 2px 0; }
+.log .ok { color: #3fb950; }
+.log .fail { color: #f85149; }
+.log .info { color: #8b949e; }
+.stats { display: flex; gap: 16px; justify-content: center; margin: 16px 0; }
+.stat { text-align: center; }
+.stat-num { font-size: 28px; font-weight: 700; }
+.stat-label { font-size: 12px; color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📋 批量签到测试</h1>
+  <p>快速生成测试签到人员，验证抽奖排除已中奖人员的逻辑。</p>
+
+  <label>服务器地址</label>
+  <input id="serverUrl" value="http://localhost:3001" />
+
+  <label>签到人数</label>
+  <input id="count" type="number" value="100" min="1" max="500" />
+
+  <button class="btn btn-primary" id="btnSign" onclick="batchCheckin()">🚀 批量签到</button>
+  <button class="btn btn-danger" onclick="clearCheckins()">🗑 清空签到</button>
+  <button class="btn btn-outline" onclick="checkStats()">📊 查看签到统计</button>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-label">已签到</div></div>
+    <div class="stat"><div class="stat-num" id="statSuccess" style="color:#3fb950">0</div><div class="stat-label">本次成功</div></div>
+    <div class="stat"><div class="stat-num" id="statFail" style="color:#f85149">0</div><div class="stat-label">本次失败</div></div>
+  </div>
+
+  <div class="log" id="log"><div class="info">等待操作...</div></div>
+</div>
+
+<script>
+const BASE = document.getElementById('serverUrl');
+const COUNT = document.getElementById('count');
+const LOG = document.getElementById('log');
+const STAT_TOTAL = document.getElementById('statTotal');
+const STAT_OK = document.getElementById('statSuccess');
+const STAT_FAIL = document.getElementById('statFail');
+const BTN = document.getElementById('btnSign');
+
+function log(msg, cls = 'info') {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = msg;
+  LOG.appendChild(d);
+  LOG.scrollTop = LOG.scrollHeight;
+}
+
+async function batchCheckin() {
+  BTN.disabled = true;
+  const url = BASE.value.replace(/\/$/, '');
+  const count = parseInt(COUNT.value) || 100;
+  LOG.innerHTML = '';
+  STAT_OK.textContent = '0';
+  STAT_FAIL.textContent = '0';
+
+  log(`开始批量签到 ${count} 人 → ${url} ...`, 'info');
+
+  const depts = ['内科','外科','儿科','骨科','眼科','耳鼻喉科','皮肤科','麻醉科','口腔科','急诊科'];
+  const surnames = '张王李赵陈杨黄周吴徐孙胡朱高林何郭马罗梁'.split('');
+
+  const names = Array.from({ length: count }, (_, i) => {
+    const num = String(i + 1).padStart(3, '0');
+    return `${surnames[i % surnames.length]}测试${num}`;
+  });
+
+  let ok = 0, fail = 0;
+
+  for (let i = 0; i < names.length; i++) {
+    const dept = depts[i % depts.length];
+    try {
+      const res = await fetch(`${url}/api/checkin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: names[i], department: dept }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        ok++;
+        if (ok <= 3 || ok % 10 === 0) log(`✅ ${names[i]} (${dept})`, 'ok');
+      } else {
+        fail++;
+        if (fail <= 5) log(`❌ ${names[i]}: ${data.error}`, 'fail');
+      }
+    } catch (e) {
+      fail++;
+      if (fail <= 5) log(`❌ ${names[i]}: ${e.message}`, 'fail');
+    }
+    // Update stats in real-time
+    STAT_OK.textContent = ok;
+    STAT_FAIL.textContent = fail;
+  }
+
+  // Refresh total
+  try {
+    const list = await fetch(`${url}/api/checkin/list`).then(r => r.json());
+    STAT_TOTAL.textContent = list.length;
+  } catch {}
+
+  log(`\n✅ 完成! 成功 ${ok} / 失败 ${fail}`, ok > 0 ? 'ok' : 'fail');
+  BTN.disabled = false;
+}
+
+async function clearCheckins() {
+  if (!confirm('确认清空所有签到记录？')) return;
+  const url = BASE.value.replace(/\/$/, '');
+  try {
+    // Use the Socket.IO approach - we can't easily emit from here,
+    // so we'll call the host directly
+    log('请在 HostConsole 点击 "清空" 按钮', 'info');
+    // Alternative: direct socket emit isn't possible from plain HTML
+    // User should use the HostConsole's 清空 button
+  } catch {}
+}
+
+async function checkStats() {
+  const url = BASE.value.replace(/\/$/, '');
+  try {
+    const list = await fetch(`${url}/api/checkin/list`).then(r => r.json());
+    STAT_TOTAL.textContent = list.length;
+    log(`当前签到总数: ${list.length} 人`, 'info');
+  } catch (e) {
+    log(`获取失败: ${e.message}`, 'fail');
+  }
+}
+
+// Initial stats on load
+checkStats();
+</script>
+</body>
+</html>

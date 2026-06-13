@@ -494,8 +494,14 @@ io.on('connection', (socket) => {
       socket.emit('host:error', `第 ${state.questionGroup} 组没有题目，请先导入`);
       return;
     }
+    // Check if all questions in this group have been used
+    if (state.questionIndex >= groupQs.length - 1) {
+      socket.emit('host:error', state.currentRound < state.totalRounds
+        ? `第${state.currentRound}轮题目已答完，请进行抽奖或点击"下一轮"`
+        : '本轮题目已答完，请进行抽奖或点击"结算"');
+      return;
+    }
     state.questionIndex++;
-    if (state.questionIndex >= groupQs.length) state.questionIndex = 0;
     state.currentQuestion = groupQs[state.questionIndex];
     resetForNewQuestion();
     state.mode = 'reading';
@@ -655,6 +661,12 @@ io.on('connection', (socket) => {
         roundResults: {},
         allWinnerIds: [],
       };
+    } else if (!lotteryV2State.active && lotteryV2State.phase === 'idle') {
+      // Resume from idle (interleaved mode)
+      lotteryV2State.active = true;
+      lotteryV2State.phase = 'ready';
+    } else {
+      return; // Already in progress, ignore
     }
     // Compute pool for display (exclude already-won)
     lotteryV2State.pool = checkIns.filter(p => !lotteryV2State!.allWinnerIds.includes(p.id));
@@ -662,7 +674,7 @@ io.on('connection', (socket) => {
     state.mode = 'lottery-v2';
     broadcastState();
     broadcastLotteryV2State();
-    console.log(`[lottery-v2] started`);
+    console.log(`[lottery-v2] started, round ${lotteryV2State.currentRound}`);
   });
 
   socket.on('stage:lottery-v2-draw', () => {
@@ -732,11 +744,14 @@ io.on('connection', (socket) => {
       }
     }
 
+    lotteryV2State.currentWinners = [];
+
     // Determine next step
     if (round >= 4) {
+      // Last round done — show summary in lottery-v2 mode
       lotteryV2State.phase = 'all-complete';
     } else if (round === 3) {
-      // Check if round 4 is needed (any absent winners from rounds 1-3)
+      // Check if round 4 (补抽) is needed
       let absentCount = 0;
       for (let r = 1; r <= 3; r++) {
         const rr = lotteryV2State.roundResults[r];
@@ -744,22 +759,25 @@ io.on('connection', (socket) => {
       }
       if (absentCount > 0) {
         lotteryV2State.currentRound = 4;
-        lotteryV2State.phase = 'ready';
-        lotteryV2State.currentWinners = [];
-        lotteryV2State.pool = checkIns.filter(p => !lotteryV2State!.allWinnerIds.includes(p.id));
+        lotteryV2State.phase = 'idle';
+        lotteryV2State.active = false;
+        state.mode = state.previousMode;
       } else {
+        // All done — stay in lottery-v2 mode for summary
         lotteryV2State.phase = 'all-complete';
       }
     } else {
-      // Advance to next round (2 or 3)
+      // Rounds 1, 2: save and exit to quiz (interleaved flow)
       lotteryV2State.currentRound++;
-      lotteryV2State.phase = 'ready';
+      lotteryV2State.phase = 'idle';
+      lotteryV2State.active = false;
       lotteryV2State.currentWinners = [];
-      lotteryV2State.pool = checkIns.filter(p => !lotteryV2State!.allWinnerIds.includes(p.id));
+      state.mode = state.previousMode;
     }
 
+    broadcastState();
     broadcastLotteryV2State();
-    console.log(`[lottery-v2] round ${round} confirmed, absent: ${absentIds.length}`);
+    console.log(`[lottery-v2] round ${round} confirmed, absent: ${absentIds.length}, next phase: ${lotteryV2State.phase}`);
   });
 
   socket.on('host:lottery-v2-exit', () => {
